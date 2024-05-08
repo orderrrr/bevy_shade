@@ -851,6 +851,9 @@ name = "bevy_shade"
 version = "0.1.0"
 dependencies = [
  "bevy",
+ "js-sys",
+ "wasm-bindgen",
+ "web-sys",
 ]
 
 [[package]]

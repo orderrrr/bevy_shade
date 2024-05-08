@@ -56,7 +56,7 @@ impl Plugin for CustomAssetReaderPlugin {
             AssetSource::build().with_reader(|| {
                 Box::new(CustomAssetReader(
                     // This is the default reader for the current platform
-                    JsWasmAssetReader::new("assets".to_string())
+                    Box::new(JsWasmAssetReader::new("assets".to_string())),
                 ))
             }),
         );
@@ -73,7 +73,7 @@ fn main() {
 fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
     commands.spawn(Camera2dBundle::default());
     commands.spawn(SpriteBundle {
-        texture: asset_server.load("branding/icon.png"),
+        texture: asset_server.load("idk/idk.png"),
         ..default()
     });
 }

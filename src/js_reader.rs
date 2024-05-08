@@ -1,19 +1,19 @@
 use std::path::{Path, PathBuf};
-use std::pin::Pin;
+use std::pin::{pin, Pin};
 use std::task::Poll;
 
 // import a JS function called `foo` from the module `mod`
-use crate::AssetReader;
-use bevy::asset::io::PathStream;
-use bevy::asset::io::{AssetReader, AssetReaderError, Reader, get_meta_path};
+use bevy::asset::io::{AssetReader, AssetReaderError, Reader};
+use bevy::asset::io::{PathStream, VecReader};
 use bevy::log::error;
 use bevy::tasks::futures_lite::Stream;
+use bevy::utils::BoxedFuture;
 
-use crate::PathStream;
+use wasm_bindgen::{prelude::wasm_bindgen, JsValue};
 
-#[link(wasm_import_module = "shade")]
+#[wasm_bindgen(module = "js_reader.js")]
 extern "C" {
-    fn get_shader(path: String) -> String;
+    fn fetch_shader(path: &str) -> JsValue;
 }
 
 /// A [`PathBuf`] [`Stream`] implementation that immediately returns nothing.
@@ -45,38 +45,64 @@ impl JsWasmAssetReader {
 }
 
 impl JsWasmAssetReader {
-    async fn fetch_bytes<'a>(&self, path: PathBuf) -> Result<Box<Reader<'a>>, AssetReaderError> {
-        // TODO
+    async fn fetch_bytes<'a>(&self, path: String) -> Result<Box<Reader<'a>>, AssetReaderError> {
+        // // TODO
 
-        error!("TODO");
+        // let test =
+
+        // // let res  = String::from_utf8_lossy(test.vec);
+        // let reader: Box<Reader> = Box::new(VecReader::new(res.as_bytes().to_vec()));
+        // Ok(reader)
+
+        let res = fetch_shader(path.as_str()).as_string().unwrap();
+        let reader: Box<Reader> = Box::new(VecReader::new(res.as_bytes().to_vec()));
+        Ok(reader)
     }
 }
 
-impl AssetReader for HttpWasmAssetReader {
-    async fn read<'a>(&'a self, path: &'a Path) -> Result<Box<Reader<'a>>, AssetReaderError> {
-        let path = self.root_path.join(path);
-        self.fetch_bytes(path).await
+pub fn get_meta_path(path: &Path) -> PathBuf {
+    let mut meta_path = path.to_path_buf();
+    let mut extension = path.extension().unwrap_or_default().to_os_string();
+    extension.push(".meta");
+    meta_path.set_extension(extension);
+    meta_path
+}
+
+impl AssetReader for JsWasmAssetReader {
+    fn read<'a>(
+        &'a self,
+        path: &'a Path,
+    ) -> BoxedFuture<'a, Result<Box<Reader<'a>>, AssetReaderError>> {
+        Box::pin(async move {
+            let path = self.root_path.join(path);
+            self.fetch_bytes(path.to_string_lossy().to_string()).await
+        })
     }
 
-    async fn read_meta<'a>(&'a self, path: &'a Path) -> Result<Box<Reader<'a>>, AssetReaderError> {
-        let meta_path = get_meta_path(&self.root_path.join(path));
-        self.fetch_bytes(meta_path).await
+    fn read_meta<'a>(
+        &'a self,
+        path: &'a Path,
+    ) -> BoxedFuture<'a, Result<Box<Reader<'a>>, AssetReaderError>> {
+        Box::pin(async move {
+            let meta_path = get_meta_path(&self.root_path.join(path));
+            Ok(self.fetch_bytes(meta_path.to_string_lossy().to_string()).await?)
+        })
     }
 
-    async fn read_directory<'a>(
+    fn read_directory<'a>(
         &'a self,
         _path: &'a Path,
-    ) -> Result<Box<PathStream>, AssetReaderError> {
+    ) -> BoxedFuture<'a, Result<Box<PathStream>, AssetReaderError>> {
         let stream: Box<PathStream> = Box::new(EmptyPathStream);
         error!("Reading directories is not supported with the HttpWasmAssetReader");
-        Ok(stream)
+        Box::pin(async move { Ok(stream) })
     }
 
-    async fn is_directory<'a>(
+    fn is_directory<'a>(
         &'a self,
         _path: &'a Path,
-    ) -> std::result::Result<bool, AssetReaderError> {
+    ) -> BoxedFuture<'a, std::result::Result<bool, AssetReaderError>> {
         error!("Reading directories is not supported with the HttpWasmAssetReader");
-        Ok(false)
+        Box::pin(async move { Ok(false) })
     }
 }
