@@ -11,7 +11,7 @@ use bevy::utils::BoxedFuture;
 
 use wasm_bindgen::{prelude::wasm_bindgen, JsValue};
 
-#[wasm_bindgen(module = "/static/js_reader.js")]
+#[wasm_bindgen(module = "js_reader")]
 extern "C" {
     fn fetch_shader(path: &str) -> JsValue;
 }

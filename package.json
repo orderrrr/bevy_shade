@@ -1,7 +1,10 @@
 {
   "name": "sveltekit-static",
   "scripts": {
-    "dev": "vite dev",
+    "link": "cd ./local_modules/shade_mod && npm link && cd ../js_reader && npm link && cd ../../ && npm link shade_mod && npm link js_reader",
+    "cargo-build": "cargo build --release --target wasm32-unknown-unknown && wasm-bindgen --no-typescript --target web --out-dir ./static/shade/ --out-name bevy_shade ./target/wasm32-unknown-unknown/release/bevy_shade.wasm",
+    "replace-import": "npx -y shx sed -i \"s/'js_reader'/'\\/js_reader\\.js?url'/g\" ./static/shade/bevy_shade.js",
+    "dev": "npm run cargo-build && npm run replace-import && vite dev",
     "build": "vite build",
     "preview": "vite preview"
   },
@@ -10,7 +13,11 @@
     "@sveltejs/adapter-static": "^3.0.1",
     "@sveltejs/kit": "^2.5.0",
     "svelte": "^4.2.9",
-    "vite": "^5.0.12"
+    "vite": "^5.0.12",
+    "mv": "^2.1.1"
   },
-  "type": "module"
+  "type": "module",
+  "dependencies": {
+    "svelte-codemirror-editor": "^1.4.0"
+  }
 }
