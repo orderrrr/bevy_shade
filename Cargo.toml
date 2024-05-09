@@ -4,7 +4,12 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-bevy = "0.13.2"
+bevy = { version = "0.13.2", features = ["webgpu"] }
 wasm-bindgen = "0.2.92"
 web-sys = { version = "0.3", features = ["Window"] }
 js-sys = "0.3"
+
+[[bin]]
+name = "main"
+path = "lib/main.rs"
+

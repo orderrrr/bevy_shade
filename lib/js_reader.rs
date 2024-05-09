@@ -11,7 +11,7 @@ use bevy::utils::BoxedFuture;
 
 use wasm_bindgen::{prelude::wasm_bindgen, JsValue};
 
-#[wasm_bindgen(module = "js_reader.js")]
+#[wasm_bindgen(module = "/static/js_reader.js")]
 extern "C" {
     fn fetch_shader(path: &str) -> JsValue;
 }
@@ -46,14 +46,6 @@ impl JsWasmAssetReader {
 
 impl JsWasmAssetReader {
     async fn fetch_bytes<'a>(&self, path: String) -> Result<Box<Reader<'a>>, AssetReaderError> {
-        // // TODO
-
-        // let test =
-
-        // // let res  = String::from_utf8_lossy(test.vec);
-        // let reader: Box<Reader> = Box::new(VecReader::new(res.as_bytes().to_vec()));
-        // Ok(reader)
-
         let res = fetch_shader(path.as_str()).as_string().unwrap();
         let reader: Box<Reader> = Box::new(VecReader::new(res.as_bytes().to_vec()));
         Ok(reader)
@@ -74,7 +66,6 @@ impl AssetReader for JsWasmAssetReader {
         path: &'a Path,
     ) -> BoxedFuture<'a, Result<Box<Reader<'a>>, AssetReaderError>> {
         Box::pin(async move {
-            let path = self.root_path.join(path);
             self.fetch_bytes(path.to_string_lossy().to_string()).await
         })
     }
@@ -84,7 +75,7 @@ impl AssetReader for JsWasmAssetReader {
         path: &'a Path,
     ) -> BoxedFuture<'a, Result<Box<Reader<'a>>, AssetReaderError>> {
         Box::pin(async move {
-            let meta_path = get_meta_path(&self.root_path.join(path));
+            let meta_path = get_meta_path(&path);
             Ok(self.fetch_bytes(meta_path.to_string_lossy().to_string()).await?)
         })
     }

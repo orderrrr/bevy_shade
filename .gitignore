@@ -1,2 +1,5 @@
 /target
 /.inspo
+/.svelt-kit
+/build
+/node_modules

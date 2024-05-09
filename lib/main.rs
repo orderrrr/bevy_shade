@@ -3,12 +3,19 @@
 //! It does not know anything about the asset formats, only how to talk to the underlying storage.
 
 use bevy::{
-    asset::io::{AssetReader, AssetReaderError, AssetSource, AssetSourceId, PathStream, Reader},
+    asset::{
+        io::{AssetReader, AssetReaderError, AssetSource, AssetSourceId, PathStream, Reader},
+        AssetMetaCheck,
+    },
     prelude::*,
+    sprite::{MaterialMesh2dBundle, Mesh2dHandle},
     utils::BoxedFuture,
+    window::PrimaryWindow,
 };
+use fragment::{PostProcessPlugin, PostProcessSettings};
 use std::path::Path;
 
+mod fragment;
 mod js_reader;
 
 use js_reader::JsWasmAssetReader;
@@ -65,15 +72,61 @@ impl Plugin for CustomAssetReaderPlugin {
 
 fn main() {
     App::new()
-        .add_plugins((CustomAssetReaderPlugin, DefaultPlugins))
+        .insert_resource(AssetMetaCheck::Never)
+        .add_plugins((
+            CustomAssetReaderPlugin,
+            DefaultPlugins.set(WindowPlugin {
+                primary_window: Some(Window {
+                    canvas: Some("#bevy_shade_canvas".into()),
+                    ..default()
+                }),
+                ..default()
+            }),
+            PostProcessPlugin,
+        ))
         .add_systems(Startup, setup)
         .run();
 }
 
-fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
-    commands.spawn(Camera2dBundle::default());
-    commands.spawn(SpriteBundle {
-        texture: asset_server.load("idk/idk.png"),
+fn setup(
+    mut commands: Commands,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+) {
+    // camera
+    commands.spawn((
+        Camera3dBundle {
+            transform: Transform::from_translation(Vec3::new(0.0, 0.0, 5.0))
+                .looking_at(Vec3::default(), Vec3::Y),
+            camera: Camera {
+                clear_color: Color::WHITE.into(),
+                ..default()
+            },
+            ..default()
+        },
+        // Add the setting to the camera.
+        // This component is also used to determine on which camera to run the post processing effect.
+        PostProcessSettings {
+            intensity: 0.02,
+            ..default()
+        },
+    ));
+
+    // cube
+    commands.spawn((
+        PbrBundle {
+            mesh: meshes.add(Cuboid::default()),
+            material: materials.add(Color::rgb(0.8, 0.7, 0.6)),
+            transform: Transform::from_xyz(0.0, 0.5, 0.0),
+            ..default()
+        },
+    ));
+    // light
+    commands.spawn(DirectionalLightBundle {
+        directional_light: DirectionalLight {
+            illuminance: 1_000.,
+            ..default()
+        },
         ..default()
     });
 }
