@@ -1,5 +1,3 @@
-<script>
-  import { page } from "$app/stores";
-</script>
+<script></script>
 
 <a href='/shader'>shader</a>

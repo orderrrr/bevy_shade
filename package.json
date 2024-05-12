@@ -12,12 +12,15 @@
     "@fontsource/fira-mono": "^4.5.10",
     "@sveltejs/adapter-static": "^3.0.1",
     "@sveltejs/kit": "^2.5.0",
+    "mv": "^2.1.1",
     "svelte": "^4.2.9",
-    "vite": "^5.0.12",
-    "mv": "^2.1.1"
+    "vite": "^5.0.12"
   },
   "type": "module",
   "dependencies": {
+    "codemirror": "^6.0.1",
+    "@codemirror/theme-one-dark": "^6.0.0",
+    "@iizukak/codemirror-lang-wgsl": "^0.3.0",
     "svelte-codemirror-editor": "^1.4.0"
   }
 }

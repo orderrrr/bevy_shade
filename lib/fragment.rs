@@ -1,9 +1,10 @@
 use bevy::{
     core_pipeline::{
-        core_3d::graph::{Core3d, Node3d},
+        core_2d::graph::{Core2d, Node2d},
         fullscreen_vertex_shader::fullscreen_shader_vertex_state,
     },
     ecs::query::QueryItem,
+    math::I64Vec2,
     prelude::*,
     render::{
         extract_component::{
@@ -23,6 +24,8 @@ use bevy::{
     },
 };
 
+pub const FRAGMENT_001: &str = "shaders/fragment.wgsl";
+
 /// It is generally encouraged to set up post processing effects as a plugin
 pub struct PostProcessPlugin;
 
@@ -36,11 +39,14 @@ impl Plugin for PostProcessPlugin {
             // It's important to derive [`ExtractComponent`] on [`PostProcessingSettings`]
             // for this plugin to work correctly.
             ExtractComponentPlugin::<PostProcessSettings>::default(),
+            ExtractComponentPlugin::<Globals>::default(),
             // The settings will also be the data used in the shader.
             // This plugin will prepare the component for the GPU by creating a uniform buffer
             // and writing the data to that buffer every frame.
             UniformComponentPlugin::<PostProcessSettings>::default(),
-        ));
+            UniformComponentPlugin::<Globals>::default(),
+        ))
+        .add_systems(Update, update_uniforms);
 
         // We need to get the render app from the main app
         let Ok(render_app) = app.get_sub_app_mut(RenderApp) else {
@@ -63,18 +69,18 @@ impl Plugin for PostProcessPlugin {
             // matching the [`ViewQuery`]
             .add_render_graph_node::<ViewNodeRunner<PostProcessNode>>(
                 // Specify the label of the graph, in this case we want the graph for 3d
-                Core3d,
+                Core2d,
                 // It also needs the label of the node
                 PostProcessLabel,
             )
             .add_render_graph_edges(
-                Core3d,
+                Core2d,
                 // Specify the node ordering.
                 // This will automatically create all required node edges to enforce the given ordering.
                 (
-                    Node3d::Tonemapping,
+                    Node2d::Tonemapping,
                     PostProcessLabel,
-                    Node3d::EndMainPassPostProcessing,
+                    Node2d::EndMainPassPostProcessing,
                 ),
             );
     }
@@ -108,6 +114,7 @@ impl ViewNode for PostProcessNode {
         &'static ViewTarget,
         // This makes sure the node only runs on cameras with the PostProcessSettings component
         &'static PostProcessSettings,
+        &'static Globals,
     );
 
     // Runs the node logic
@@ -121,7 +128,7 @@ impl ViewNode for PostProcessNode {
         &self,
         _graph: &mut RenderGraphContext,
         render_context: &mut RenderContext,
-        (view_target, _post_process_settings): QueryItem<Self::ViewQuery>,
+        (view_target, _post_process_settings, _global_settings): QueryItem<Self::ViewQuery>,
         world: &World,
     ) -> Result<(), NodeRunError> {
         // Get the pipeline resource that contains the global data we need
@@ -142,6 +149,11 @@ impl ViewNode for PostProcessNode {
         // Get the settings uniform binding
         let settings_uniforms = world.resource::<ComponentUniforms<PostProcessSettings>>();
         let Some(settings_binding) = settings_uniforms.uniforms().binding() else {
+            return Ok(());
+        };
+
+        let globals_uniforms = world.resource::<ComponentUniforms<Globals>>();
+        let Some(globals_binding) = globals_uniforms.uniforms().binding() else {
             return Ok(());
         };
 
@@ -172,6 +184,7 @@ impl ViewNode for PostProcessNode {
                 &post_process_pipeline.sampler,
                 // Set the settings binding
                 settings_binding.clone(),
+                globals_binding.clone(),
             )),
         );
 
@@ -225,6 +238,7 @@ impl FromWorld for PostProcessPipeline {
                     sampler(SamplerBindingType::Filtering),
                     // The settings uniform that will control the effect
                     uniform_buffer::<PostProcessSettings>(false),
+                    uniform_buffer::<Globals>(false),
                 ),
             ),
         );
@@ -233,9 +247,7 @@ impl FromWorld for PostProcessPipeline {
         let sampler = render_device.create_sampler(&SamplerDescriptor::default());
 
         // Get the shader handle
-        let shader = world
-            .resource::<AssetServer>()
-            .load("shaders/fragment.wgsl");
+        let shader = world.resource::<AssetServer>().load(FRAGMENT_001);
 
         let pipeline_id = world
             .resource_mut::<PipelineCache>()
@@ -273,11 +285,44 @@ impl FromWorld for PostProcessPipeline {
     }
 }
 
+pub fn update_uniforms(
+    window_changed: Query<
+        // components
+        &Window,
+        // filters
+        Changed<Window>,
+    >,
+    mut global_query: Query<&mut Globals>,
+    time: Res<Time>,
+) {
+    for window in window_changed.iter() {
+        let res = &window.resolution;
+        let x = res.physical_width();
+        let y = res.physical_height();
+
+        info!("Updating resolution");
+
+        for mut global in global_query.iter_mut() {
+            global.resolution.x = x as f32;
+            global.resolution.y = y as f32;
+        }
+    }
+
+    for mut global in global_query.iter_mut() {
+        global.time = time.elapsed_seconds() as f32;
+    }
+}
+
+// TODO - maybe remove
 // This is the component that will get passed to the shader
 #[derive(Component, Default, Clone, Copy, ExtractComponent, ShaderType)]
 pub struct PostProcessSettings {
     pub intensity: f32,
-    // WebGL2 structs must be 16 byte aligned.
-    #[cfg(feature = "webgl2")]
-    pub _webgl2_padding: Vec3,
+}
+
+// This is the component that will get passed to the shader
+#[derive(Component, Default, Clone, Copy, ExtractComponent, ShaderType)]
+pub struct Globals {
+    pub resolution: Vec2,
+    pub time: f32,
 }
