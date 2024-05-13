@@ -24,7 +24,7 @@ fn main() {
             DefaultPlugins
                 .set(WindowPlugin {
                     primary_window: Some(Window {
-                        // canvas: Some("#bevy_shade_canvas".into()),
+                        canvas: Some("#bevy_shade_canvas".into()),
                         ..default()
                     }),
                     ..default()
