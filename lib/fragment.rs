@@ -1,3 +1,8 @@
+use bevy::core::FrameCount;
+use bevy::render::camera::ExtractedCamera;
+use bevy::render::texture::{CachedTexture, TextureCache};
+use bevy::render::view::ExtractedView;
+use bevy::render::{MainWorld, Render, RenderSet};
 use bevy::{
     core_pipeline::{
         core_2d::graph::{Core2d, Node2d},
@@ -26,27 +31,26 @@ use bevy::{
 
 pub const FRAGMENT_001: &str = "shaders/fragment.wgsl";
 
-/// It is generally encouraged to set up post processing effects as a plugin
+/// It is generally encouraged to set up post-processing effects as a plugin
 pub struct PostProcessPlugin;
 
 impl Plugin for PostProcessPlugin {
     fn build(&self, app: &mut App) {
-        app.add_plugins((
-            // The settings will be a component that lives in the main world but will
-            // be extracted to the render world every frame.
-            // This makes it possible to control the effect from the main world.
-            // This plugin will take care of extracting it automatically.
-            // It's important to derive [`ExtractComponent`] on [`PostProcessingSettings`]
-            // for this plugin to work correctly.
-            ExtractComponentPlugin::<PostProcessSettings>::default(),
-            ExtractComponentPlugin::<Globals>::default(),
-            // The settings will also be the data used in the shader.
-            // This plugin will prepare the component for the GPU by creating a uniform buffer
-            // and writing the data to that buffer every frame.
-            UniformComponentPlugin::<PostProcessSettings>::default(),
-            UniformComponentPlugin::<Globals>::default(),
-        ))
-        .add_systems(Update, update_uniforms);
+        app.register_type::<FragmentSettings>()
+            .add_plugins((
+                // The settings will be a component that lives in the main world but will
+                // be extracted to the render world every frame.
+                // This makes it possible to control the effect from the main world.
+                // This plugin will take care of extracting it automatically.
+                // It's important to derive [`ExtractComponent`] on [`PostProcessingSettings`]
+                // for this plugin to work correctly.
+                ExtractComponentPlugin::<Globals>::default(),
+                // The settings will also be the data used in the shader.
+                // This plugin will prepare the component for the GPU by creating a uniform buffer
+                // and writing the data to that buffer every frame.
+                UniformComponentPlugin::<Globals>::default(),
+            ))
+            .add_systems(Update, update_uniforms);
 
         // We need to get the render app from the main app
         let Ok(render_app) = app.get_sub_app_mut(RenderApp) else {
@@ -67,21 +71,26 @@ impl Plugin for PostProcessPlugin {
             //
             // The [`ViewNodeRunner`] is a special [`Node`] that will automatically run the node for each view
             // matching the [`ViewQuery`]
-            .add_render_graph_node::<ViewNodeRunner<PostProcessNode>>(
+            .init_resource::<SpecializedRenderPipelines<FragmentPipeline>>()
+            .add_systems(ExtractSchedule, extract_fragment_settings)
+            .add_systems(
+                Render,
+                (
+                    prepare_fragment_pipelines.in_set(RenderSet::Prepare),
+                    prepare_fragment_history_textures.in_set(RenderSet::PrepareResources),
+                ),
+            )
+            .add_render_graph_node::<ViewNodeRunner<FragmentNode>>(
                 // Specify the label of the graph, in this case we want the graph for 3d
                 Core2d,
                 // It also needs the label of the node
-                PostProcessLabel,
+                FragmentLabel,
             )
             .add_render_graph_edges(
                 Core2d,
                 // Specify the node ordering.
                 // This will automatically create all required node edges to enforce the given ordering.
-                (
-                    Node2d::Tonemapping,
-                    PostProcessLabel,
-                    Node2d::EndMainPassPostProcessing,
-                ),
+                (Node2d::MainPass, FragmentLabel, Node2d::Tonemapping),
             );
     }
 
@@ -93,62 +102,78 @@ impl Plugin for PostProcessPlugin {
 
         render_app
             // Initialize the pipeline
-            .init_resource::<PostProcessPipeline>();
+            .init_resource::<FragmentPipeline>();
     }
 }
 
 #[derive(Debug, Hash, PartialEq, Eq, Clone, RenderLabel)]
-struct PostProcessLabel;
+struct FragmentLabel;
 
 // The post process node used for the render graph
 #[derive(Default)]
-struct PostProcessNode;
+struct FragmentNode;
 
-// The ViewNode trait is required by the ViewNodeRunner
-impl ViewNode for PostProcessNode {
-    // The node needs a query to gather data from the ECS in order to do its rendering,
-    // but it's not a normal system so we need to define it manually.
-    //
-    // This query will only run on the view entity
+#[derive(Component)]
+pub struct FragmentPipelineId(CachedRenderPipelineId);
+
+#[derive(Component)]
+pub struct FragmentHistoryTexture {
+    write: CachedTexture,
+    read: CachedTexture,
+}
+
+#[derive(PartialEq, Eq, Hash, Clone)]
+struct FragmentPipelineKey {
+    hdr: bool,
+    reset: bool,
+}
+
+fn prepare_fragment_pipelines(
+    mut commands: Commands,
+    pipeline_cache: Res<PipelineCache>,
+    mut pipelines: ResMut<SpecializedRenderPipelines<FragmentPipeline>>,
+    pipeline: Res<FragmentPipeline>,
+    views: Query<(Entity, &ExtractedView, &FragmentSettings)>,
+) {
+    for (entity, view, fragment_settings) in &views {
+        let mut pipeline_key = FragmentPipelineKey {
+            hdr: view.hdr,
+            reset: fragment_settings.reset,
+        };
+        let pipeline_id = pipelines.specialize(&pipeline_cache, &pipeline, pipeline_key.clone());
+
+        // if pipeline_key.reset {
+        pipeline_key.reset = false;
+        pipelines.specialize(&pipeline_cache, &pipeline, pipeline_key);
+        // }
+
+        commands
+            .entity(entity)
+            .insert(FragmentPipelineId(pipeline_id));
+    }
+}
+
+impl ViewNode for FragmentNode {
     type ViewQuery = (
+        &'static ExtractedCamera,
         &'static ViewTarget,
-        // This makes sure the node only runs on cameras with the PostProcessSettings component
-        &'static PostProcessSettings,
+        &'static FragmentHistoryTexture,
+        &'static FragmentPipelineId,
         &'static Globals,
     );
 
-    // Runs the node logic
-    // This is where you encode draw commands.
-    //
-    // This will run on every view on which the graph is running.
-    // If you don't want your effect to run on every camera,
-    // you'll need to make sure you have a marker component as part of [`ViewQuery`]
-    // to identify which camera(s) should run the effect.
     fn run(
         &self,
         _graph: &mut RenderGraphContext,
         render_context: &mut RenderContext,
-        (view_target, _post_process_settings, _global_settings): QueryItem<Self::ViewQuery>,
+        (camera, view_target, fragment_history_textures, fragment_pipeline_id, _global_settings): QueryItem<Self::ViewQuery>,
         world: &World,
     ) -> Result<(), NodeRunError> {
-        // Get the pipeline resource that contains the global data we need
-        // to create the render pipeline
-        let post_process_pipeline = world.resource::<PostProcessPipeline>();
-
-        // The pipeline cache is a cache of all previously created pipelines.
-        // It is required to avoid creating a new pipeline each frame,
-        // which is expensive due to shader compilation.
+        let post_process_pipeline = world.resource::<FragmentPipeline>();
         let pipeline_cache = world.resource::<PipelineCache>();
 
         // Get the pipeline from the cache
-        let Some(pipeline) = pipeline_cache.get_render_pipeline(post_process_pipeline.pipeline_id)
-        else {
-            return Ok(());
-        };
-
-        // Get the settings uniform binding
-        let settings_uniforms = world.resource::<ComponentUniforms<PostProcessSettings>>();
-        let Some(settings_binding) = settings_uniforms.uniforms().binding() else {
+        let Some(pipeline) = pipeline_cache.get_render_pipeline(fragment_pipeline_id.0) else {
             return Ok(());
         };
 
@@ -174,30 +199,36 @@ impl ViewNode for PostProcessNode {
         // The only way to have the correct source/destination for the bind_group
         // is to make sure you get it during the node execution.
         let bind_group = render_context.render_device().create_bind_group(
-            "post_process_bind_group",
-            &post_process_pipeline.layout,
+            "fragment_group",
+            &post_process_pipeline.group_layout,
             // It's important for this to match the BindGroupLayout defined in the PostProcessPipeline
             &BindGroupEntries::sequential((
                 // Make sure to use the source view
                 post_process.source,
-                // Use the sampler created for the pipeline
-                &post_process_pipeline.sampler,
-                // Set the settings binding
-                settings_binding.clone(),
+                &fragment_history_textures.read.default_view,
+                &post_process_pipeline.nearest_sampler,
+                &post_process_pipeline.linear_sampler,
                 globals_binding.clone(),
             )),
         );
 
         // Begin the render pass
         let mut render_pass = render_context.begin_tracked_render_pass(RenderPassDescriptor {
-            label: Some("post_process_pass"),
-            color_attachments: &[Some(RenderPassColorAttachment {
-                // We need to specify the post process destination view here
-                // to make sure we write to the appropriate texture.
-                view: post_process.destination,
-                resolve_target: None,
-                ops: Operations::default(),
-            })],
+            label: Some("fragment_pass"),
+            color_attachments: &[
+                Some(RenderPassColorAttachment {
+                    // We need to specify the post process destination view here
+                    // to make sure we write to the appropriate texture.
+                    view: post_process.destination,
+                    resolve_target: None,
+                    ops: Operations::default(),
+                }),
+                Some(RenderPassColorAttachment {
+                    view: &fragment_history_textures.write.default_view,
+                    resolve_target: None,
+                    ops: Operations::default(),
+                }),
+            ],
             depth_stencil_attachment: None,
             timestamp_writes: None,
             occlusion_query_set: None,
@@ -207,6 +238,9 @@ impl ViewNode for PostProcessNode {
         // using the pipeline/bind_group created above
         render_pass.set_render_pipeline(pipeline);
         render_pass.set_bind_group(0, &bind_group, &[]);
+        if let Some(viewport) = camera.viewport.as_ref() {
+            render_pass.set_camera_viewport(viewport);
+        }
         render_pass.draw(0..3, 0..1);
 
         Ok(())
@@ -215,18 +249,32 @@ impl ViewNode for PostProcessNode {
 
 // This contains global data used by the render pipeline. This will be created once on startup.
 #[derive(Resource)]
-struct PostProcessPipeline {
-    layout: BindGroupLayout,
-    sampler: Sampler,
-    pipeline_id: CachedRenderPipelineId,
+struct FragmentPipeline {
+    group_layout: BindGroupLayout,
+    shader: Handle<Shader>,
+    nearest_sampler: Sampler,
+    linear_sampler: Sampler,
 }
 
-impl FromWorld for PostProcessPipeline {
+impl FromWorld for FragmentPipeline {
     fn from_world(world: &mut World) -> Self {
         let render_device = world.resource::<RenderDevice>();
 
+        let nearest_sampler = render_device.create_sampler(&SamplerDescriptor {
+            label: Some("feedback_nearest_sampler"),
+            mag_filter: FilterMode::Nearest,
+            min_filter: FilterMode::Nearest,
+            ..SamplerDescriptor::default()
+        });
+        let linear_sampler = render_device.create_sampler(&SamplerDescriptor {
+            label: Some("feedback_linear_sampler"),
+            mag_filter: FilterMode::Linear,
+            min_filter: FilterMode::Linear,
+            ..SamplerDescriptor::default()
+        });
+
         // We need to define the bind group layout used for our pipeline
-        let layout = render_device.create_bind_group_layout(
+        let group_layout = render_device.create_bind_group_layout(
             "post_process_bind_group_layout",
             &BindGroupLayoutEntries::sequential(
                 // The layout entries will only be visible in the fragment stage
@@ -234,53 +282,23 @@ impl FromWorld for PostProcessPipeline {
                 (
                     // The screen texture
                     texture_2d(TextureSampleType::Float { filterable: true }),
+                    texture_2d(TextureSampleType::Float { filterable: true }),
                     // The sampler that will be used to sample the screen texture
+                    sampler(SamplerBindingType::NonFiltering),
                     sampler(SamplerBindingType::Filtering),
-                    // The settings uniform that will control the effect
-                    uniform_buffer::<PostProcessSettings>(false),
                     uniform_buffer::<Globals>(false),
                 ),
             ),
         );
 
-        // We can create the sampler here since it won't change at runtime and doesn't depend on the view
-        let sampler = render_device.create_sampler(&SamplerDescriptor::default());
-
         // Get the shader handle
         let shader = world.resource::<AssetServer>().load(FRAGMENT_001);
 
-        let pipeline_id = world
-            .resource_mut::<PipelineCache>()
-            // This will add the pipeline to the cache and queue it's creation
-            .queue_render_pipeline(RenderPipelineDescriptor {
-                label: Some("post_process_pipeline".into()),
-                layout: vec![layout.clone()],
-                // This will setup a fullscreen triangle for the vertex state
-                vertex: fullscreen_shader_vertex_state(),
-                fragment: Some(FragmentState {
-                    shader,
-                    shader_defs: vec![],
-                    // Make sure this matches the entry point of your shader.
-                    // It can be anything as long as it matches here and in the shader.
-                    entry_point: "fragment".into(),
-                    targets: vec![Some(ColorTargetState {
-                        format: TextureFormat::bevy_default(),
-                        blend: None,
-                        write_mask: ColorWrites::ALL,
-                    })],
-                }),
-                // All of the following properties are not important for this effect so just use the default values.
-                // This struct doesn't have the Default trait implemented because not all field can have a default value.
-                primitive: PrimitiveState::default(),
-                depth_stencil: None,
-                multisample: MultisampleState::default(),
-                push_constant_ranges: vec![],
-            });
-
         Self {
-            layout,
-            sampler,
-            pipeline_id,
+            shader,
+            group_layout,
+            nearest_sampler,
+            linear_sampler,
         }
     }
 }
@@ -313,11 +331,9 @@ pub fn update_uniforms(
     }
 }
 
-// TODO - maybe remove
-// This is the component that will get passed to the shader
-#[derive(Component, Default, Clone, Copy, ExtractComponent, ShaderType)]
-pub struct PostProcessSettings {
-    pub intensity: f32,
+#[derive(Component, Reflect, Default, Clone)]
+pub struct FragmentSettings {
+    pub reset: bool,
 }
 
 // This is the component that will get passed to the shader
@@ -326,3 +342,115 @@ pub struct Globals {
     pub resolution: Vec2,
     pub time: f32,
 }
+
+fn prepare_fragment_history_textures(
+    mut commands: Commands,
+    mut texture_cache: ResMut<TextureCache>,
+    render_device: Res<RenderDevice>,
+    frame_count: Res<FrameCount>,
+    views: Query<(Entity, &ExtractedCamera, &ExtractedView)>,
+) {
+    for (entity, camera, view) in &views {
+        if let Some(physical_viewport_size) = camera.physical_viewport_size {
+            let mut texture_descriptor = TextureDescriptor {
+                label: None,
+                size: Extent3d {
+                    depth_or_array_layers: 1,
+                    width: physical_viewport_size.x,
+                    height: physical_viewport_size.y,
+                },
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: TextureDimension::D2,
+                format: if view.hdr {
+                    ViewTarget::TEXTURE_FORMAT_HDR
+                } else {
+                    TextureFormat::bevy_default()
+                }, // no hdr for now.
+                usage: TextureUsages::TEXTURE_BINDING | TextureUsages::RENDER_ATTACHMENT,
+                view_formats: &[],
+            };
+
+            texture_descriptor.label = Some("fragment_history_1_texture");
+            let history_1_texture = texture_cache.get(&render_device, texture_descriptor.clone());
+
+            texture_descriptor.label = Some("fragment_history_2_texture");
+            let history_2_texture = texture_cache.get(&render_device, texture_descriptor);
+
+            let textures = if frame_count.0 % 2 == 0 {
+                FragmentHistoryTexture {
+                    write: history_1_texture,
+                    read: history_2_texture,
+                }
+            } else {
+                FragmentHistoryTexture {
+                    write: history_2_texture,
+                    read: history_1_texture,
+                }
+            };
+
+            commands.entity(entity).insert(textures);
+        }
+    }
+}
+
+fn extract_fragment_settings(mut commands: Commands, mut main_world: ResMut<MainWorld>) {
+    let mut cameras =
+        main_world.query_filtered::<(Entity, &Camera, &mut FragmentSettings), With<Camera2d>>();
+
+    for (entity, camera, mut fragment_settings) in cameras.iter_mut(&mut main_world) {
+        if camera.is_active {
+            commands
+                .get_or_spawn(entity)
+                .insert(fragment_settings.clone());
+            fragment_settings.reset = false;
+        }
+    }
+}
+
+impl SpecializedRenderPipeline for FragmentPipeline {
+    type Key = FragmentPipelineKey;
+
+    fn specialize(&self, key: Self::Key) -> RenderPipelineDescriptor {
+        let mut shader_defs = vec![];
+
+        let format = if key.hdr {
+            shader_defs.push("FRAGMENT".into());
+            ViewTarget::TEXTURE_FORMAT_HDR
+        } else {
+            TextureFormat::bevy_default()
+        };
+
+        if key.reset {
+            shader_defs.push("RESET".into());
+        }
+
+        RenderPipelineDescriptor {
+            label: Some("fragment_pipeline".into()),
+            layout: vec![self.group_layout.clone()],
+            vertex: fullscreen_shader_vertex_state(),
+            fragment: Some(FragmentState {
+                shader: self.shader.clone(),
+                shader_defs,
+                entry_point: "fragment".into(),
+                targets: vec![
+                    Some(ColorTargetState {
+                        format,
+                        blend: None,
+                        write_mask: ColorWrites::ALL,
+                    }),
+                    Some(ColorTargetState {
+                        format,
+                        blend: None,
+                        write_mask: ColorWrites::ALL,
+                    }),
+                ],
+            }),
+            primitive: PrimitiveState::default(),
+            depth_stencil: None,
+            multisample: MultisampleState::default(),
+            push_constant_ranges: Vec::new(),
+        }
+    }
+}
+

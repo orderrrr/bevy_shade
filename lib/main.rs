@@ -8,7 +8,7 @@ use bevy::{
     prelude::*,
     sprite::{MaterialMesh2dBundle, Mesh2dHandle},
 };
-use fragment::{Globals, PostProcessPlugin, PostProcessSettings};
+use fragment::{Globals, PostProcessPlugin, FragmentSettings};
 
 mod fragment;
 mod js_reader;
@@ -24,7 +24,7 @@ fn main() {
             DefaultPlugins
                 .set(WindowPlugin {
                     primary_window: Some(Window {
-                        canvas: Some("#bevy_shade_canvas".into()),
+                        // canvas: Some("#bevy_shade_canvas".into()),
                         ..default()
                     }),
                     ..default()
@@ -52,15 +52,19 @@ fn setup(
 
     // camera
     commands.spawn((
-        Camera2dBundle { ..default() },
-        PostProcessSettings {
-            intensity: 0.02,
-            ..default()
-        },
+        Camera2dBundle {
+            camera: Camera {
+              hdr: true,
+                ..default()
+            },
+            ..default() },
         Globals {
             resolution: vec2(x as f32, y as f32),
             ..default()
         },
+        FragmentSettings {
+            reset: false,
+        }
     ));
 
     commands.spawn(MaterialMesh2dBundle {

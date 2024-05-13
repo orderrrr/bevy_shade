@@ -1,12 +1,4 @@
-<script>
-  import init from "/shade/bevy_shade.js?url";
-  import { push_shader } from "/js_reader.js?url";
-  import { onMount } from "svelte";
-  import CodeMirror from "svelte-codemirror-editor";
-  import { oneDark } from "@codemirror/theme-one-dark";
-  import { wgsl } from "@iizukak/codemirror-lang-wgsl";
-
-  let value = `// This shader computes the chromatic aberration effect
+// This shader computes the chromatic aberration effect
 #import bevy_core_pipeline::fullscreen_vertex_shader::FullscreenVertexOutput
 
 @group(0) @binding(0) var screen_texture: texture_2d<f32>;
@@ -43,38 +35,4 @@ fn fragment(in: FullscreenVertexOutput) -> Output {
   out.history = vec4(col);
   out.view_target = vec4(col);
   return out;
-}`;
-
-  // so does work.
-  // push_shader("shaders/fragment.wgsl", "BROKEN");
-
-  onMount(() => {
-    init().catch((error) => {
-      if (
-        !error.message.startsWith(
-          "Using exceptions for control flow, don't mind me. This isn't actually an error!",
-        )
-      ) {
-        throw error;
-      }
-    });
-  });
-
-  const handle_change = () => {
-
-    push_shader("shaders/fragment.wgsl", value);
-  }
-
-  const click = () => {
-    push_shader("shaders/fragment.wgsl", "BROKEN");
-  };
-</script>
-
-<CodeMirror class="text_edit" bind:value lang={wgsl()} theme={oneDark} on:change={handle_change} />
-
-<style>
-  .text_edit {
-    position: absolute;
-  }
-</style>
-
+}
