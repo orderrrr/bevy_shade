@@ -1,5 +1,6 @@
 use bevy::core::FrameCount;
 use bevy::render::camera::ExtractedCamera;
+use bevy::render::globals::{GlobalsBuffer, GlobalsUniform};
 use bevy::render::texture::{CachedTexture, TextureCache};
 use bevy::render::view::ExtractedView;
 use bevy::render::{MainWorld, Render, RenderSet};
@@ -9,12 +10,8 @@ use bevy::{
         fullscreen_vertex_shader::fullscreen_shader_vertex_state,
     },
     ecs::query::QueryItem,
-    math::I64Vec2,
     prelude::*,
     render::{
-        extract_component::{
-            ComponentUniforms, ExtractComponent, ExtractComponentPlugin, UniformComponentPlugin,
-        },
         render_graph::{
             NodeRunError, RenderGraphApp, RenderGraphContext, RenderLabel, ViewNode, ViewNodeRunner,
         },
@@ -36,21 +33,7 @@ pub struct PostProcessPlugin;
 
 impl Plugin for PostProcessPlugin {
     fn build(&self, app: &mut App) {
-        app.register_type::<FragmentSettings>()
-            .add_plugins((
-                // The settings will be a component that lives in the main world but will
-                // be extracted to the render world every frame.
-                // This makes it possible to control the effect from the main world.
-                // This plugin will take care of extracting it automatically.
-                // It's important to derive [`ExtractComponent`] on [`PostProcessingSettings`]
-                // for this plugin to work correctly.
-                ExtractComponentPlugin::<Globals>::default(),
-                // The settings will also be the data used in the shader.
-                // This plugin will prepare the component for the GPU by creating a uniform buffer
-                // and writing the data to that buffer every frame.
-                UniformComponentPlugin::<Globals>::default(),
-            ))
-            .add_systems(Update, update_uniforms);
+        app.register_type::<FragmentSettings>();
 
         // We need to get the render app from the main app
         let Ok(render_app) = app.get_sub_app_mut(RenderApp) else {
@@ -159,14 +142,13 @@ impl ViewNode for FragmentNode {
         &'static ViewTarget,
         &'static FragmentHistoryTexture,
         &'static FragmentPipelineId,
-        &'static Globals,
     );
 
     fn run(
         &self,
         _graph: &mut RenderGraphContext,
         render_context: &mut RenderContext,
-        (camera, view_target, fragment_history_textures, fragment_pipeline_id, _global_settings): QueryItem<Self::ViewQuery>,
+        (camera, view_target, fragment_history_textures, fragment_pipeline_id): QueryItem<Self::ViewQuery>,
         world: &World,
     ) -> Result<(), NodeRunError> {
         let post_process_pipeline = world.resource::<FragmentPipeline>();
@@ -177,10 +159,7 @@ impl ViewNode for FragmentNode {
             return Ok(());
         };
 
-        let globals_uniforms = world.resource::<ComponentUniforms<Globals>>();
-        let Some(globals_binding) = globals_uniforms.uniforms().binding() else {
-            return Ok(());
-        };
+        let globals_buffer = world.resource::<GlobalsBuffer>();
 
         // This will start a new "post process write", obtaining two texture
         // views from the view target - a `source` and a `destination`.
@@ -204,11 +183,11 @@ impl ViewNode for FragmentNode {
             // It's important for this to match the BindGroupLayout defined in the PostProcessPipeline
             &BindGroupEntries::sequential((
                 // Make sure to use the source view
+                &globals_buffer.buffer,
                 post_process.source,
                 &fragment_history_textures.read.default_view,
                 &post_process_pipeline.nearest_sampler,
                 &post_process_pipeline.linear_sampler,
-                globals_binding.clone(),
             )),
         );
 
@@ -280,13 +259,13 @@ impl FromWorld for FragmentPipeline {
                 // The layout entries will only be visible in the fragment stage
                 ShaderStages::FRAGMENT,
                 (
+                    uniform_buffer::<GlobalsUniform>(false),
                     // The screen texture
                     texture_2d(TextureSampleType::Float { filterable: true }),
                     texture_2d(TextureSampleType::Float { filterable: true }),
                     // The sampler that will be used to sample the screen texture
                     sampler(SamplerBindingType::NonFiltering),
                     sampler(SamplerBindingType::Filtering),
-                    uniform_buffer::<Globals>(false),
                 ),
             ),
         );
@@ -303,44 +282,9 @@ impl FromWorld for FragmentPipeline {
     }
 }
 
-pub fn update_uniforms(
-    window_changed: Query<
-        // components
-        &Window,
-        // filters
-        Changed<Window>,
-    >,
-    mut global_query: Query<&mut Globals>,
-    time: Res<Time>,
-) {
-    for window in window_changed.iter() {
-        let res = &window.resolution;
-        let x = res.physical_width();
-        let y = res.physical_height();
-
-        info!("Updating resolution");
-
-        for mut global in global_query.iter_mut() {
-            global.resolution.x = x as f32;
-            global.resolution.y = y as f32;
-        }
-    }
-
-    for mut global in global_query.iter_mut() {
-        global.time = time.elapsed_seconds() as f32;
-    }
-}
-
 #[derive(Component, Reflect, Default, Clone)]
 pub struct FragmentSettings {
     pub reset: bool,
-}
-
-// This is the component that will get passed to the shader
-#[derive(Component, Default, Clone, Copy, ExtractComponent, ShaderType)]
-pub struct Globals {
-    pub resolution: Vec2,
-    pub time: f32,
 }
 
 fn prepare_fragment_history_textures(
@@ -453,4 +397,3 @@ impl SpecializedRenderPipeline for FragmentPipeline {
         }
     }
 }
-
