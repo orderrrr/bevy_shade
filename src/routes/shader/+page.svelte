@@ -6,7 +6,8 @@
   import { oneDark } from "@codemirror/theme-one-dark";
   import { wgsl } from "@iizukak/codemirror-lang-wgsl";
 
-  let value = `// This shader computes the chromatic aberration effect
+  let value = 
+`// This shader computes the chromatic aberration effect
 #import bevy_core_pipeline::fullscreen_vertex_shader::FullscreenVertexOutput
 #import bevy_render::globals::Globals
 
@@ -27,12 +28,16 @@ struct Output {
 fn fragment(in: FullscreenVertexOutput) -> Output {
     let offset_strength = sin(globals.time * 0.5) * 0.1;
 
-    var current_col = vec4<f32>(
-        textureSample(screen_texture, nearest_sampler, in.uv + vec2<f32>(offset_strength, -offset_strength)).r,
-        textureSample(screen_texture, nearest_sampler, in.uv + vec2<f32>(-offset_strength, 0.0)).g,
-        textureSample(screen_texture, nearest_sampler, in.uv + vec2<f32>(0.0, offset_strength)).b,
-        1.0
-    );
+    var uv = in.position.xy;
+
+    uv = vec2(in.uv);
+    
+    let p = length(uv);
+  
+    let px = sin(p * globals.time * 2.0) * 5.;
+    let py = cos(p * globals.time * 2.0) * 5.;
+    
+    var current_col = vec4<f32>(py, px, uv.y, 1.0);
 
     var history = vec4<f32>(textureSample(prev_frame, linear_sampler, in.uv));
 
@@ -41,10 +46,9 @@ fn fragment(in: FullscreenVertexOutput) -> Output {
 
     var out: Output;
     out.history = vec4(col);
-    out.view_target = vec4(col);
+    out.view_target = vec4(current_col);
     return out;
-}
-`;
+}`;
 
   push_shader("shaders/fragment.wgsl", value);
 

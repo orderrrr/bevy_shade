@@ -2,19 +2,13 @@
 //! An [`AssetReader`] is what the asset server uses to read the raw bytes of assets.
 //! It does not know anything about the asset formats, only how to talk to the underlying storage.
 
-use bevy::{
-    asset::AssetMetaCheck,
-    math::vec2,
-    prelude::*,
-    sprite::{MaterialMesh2dBundle, Mesh2dHandle},
-};
-use fragment::{PostProcessPlugin, FragmentSettings};
+use bevy::{asset::AssetMetaCheck, prelude::*};
+use fragment::{FragmentSettings, PostProcessPlugin};
 
 mod fragment;
 mod js_reader;
 
 use js_reader::CustomAssetReaderPlugin;
-// use web_sys::HtmlCanvasElement;
 
 fn main() {
     App::new()
@@ -36,36 +30,19 @@ fn main() {
             PostProcessPlugin,
         ))
         .add_systems(Startup, setup)
-        // .add_systems(PostUpdate, fit_canvas_to_parent)
         .run();
 }
 
-fn setup(
-    mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<ColorMaterial>>,
-    window_query: Query<&Window>,
-) {
-    let res = &window_query.single().resolution;
-    let x = res.physical_width();
-    let y = res.physical_height();
-
+fn setup(mut commands: Commands) {
     // camera
     commands.spawn((
         Camera2dBundle {
             camera: Camera {
-              hdr: true,
+                hdr: false,
                 ..default()
             },
-            ..default() },
-        FragmentSettings {
-            reset: false,
-        }
+            ..default()
+        },
+        FragmentSettings { reset: false },
     ));
-
-    commands.spawn(MaterialMesh2dBundle {
-        mesh: Mesh2dHandle(meshes.add(Circle::new(100.0))),
-        material: materials.add(Color::rgb(1.0, 1.0, 1.0)),
-        ..default()
-    });
 }
