@@ -1,9 +1,9 @@
 use bevy::{asset::AssetMetaCheck, prelude::*};
-use fragment::{FragmentSettings, FragmentPlugin};
+use shaders::fragment::{FragmentPlugin, FragmentSettings};
+use shaders::compute::ComputePlugin;
 
-mod fragment;
 mod js_reader;
-mod compute;
+mod shaders;
 
 use js_reader::CustomAssetReaderPlugin;
 
@@ -24,6 +24,7 @@ fn main() {
                     watch_for_changes_override: Some(true),
                     ..Default::default()
                 }),
+            ComputePlugin,
             FragmentPlugin,
         ))
         .add_systems(Startup, setup)
