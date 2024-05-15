@@ -1,7 +1,5 @@
 use bevy::core::FrameCount;
 use bevy::render::camera::ExtractedCamera;
-use bevy::render::extract_component::ExtractComponent;
-use bevy::render::globals::{GlobalsBuffer, GlobalsUniform};
 use bevy::render::texture::{CachedTexture, TextureCache};
 use bevy::render::view::ExtractedView;
 use bevy::render::{MainWorld, Render, RenderSet};
@@ -11,8 +9,12 @@ use bevy::{
         fullscreen_vertex_shader::fullscreen_shader_vertex_state,
     },
     ecs::query::QueryItem,
+    math::I64Vec2,
     prelude::*,
     render::{
+        extract_component::{
+            ComponentUniforms, ExtractComponent, ExtractComponentPlugin, UniformComponentPlugin,
+        },
         render_graph::{
             NodeRunError, RenderGraphApp, RenderGraphContext, RenderLabel, ViewNode, ViewNodeRunner,
         },
@@ -29,21 +31,26 @@ use bevy::{
 
 pub const FRAGMENT_001: &str = "shaders/fragment.wgsl";
 
-pub const BRICK_RES: i32 = 8_i32.pow(3);
-pub const OCTREE_SMALLEST: i32 = 8;
-pub const OCTREE_MAX_DEPTH: i32 = 1;
-
 /// It is generally encouraged to set up post-processing effects as a plugin
-pub struct FragmentPlugin;
+pub struct PostProcessPlugin;
 
-impl Plugin for FragmentPlugin {
+impl Plugin for PostProcessPlugin {
     fn build(&self, app: &mut App) {
-        app.register_type::<FragmentSettings>().add_plugins((
-            // ExtractComponentPlugin::<Globals>::default(),
-            // UniformComponentPlugin::<Globals>::default(),
-            // ExtractComponentPlugin::<Globals>::default(),
-            // UniformComponentPlugin::<Globals>::default(),
-        ));
+        app.register_type::<FragmentSettings>()
+            .add_plugins((
+                // The settings will be a component that lives in the main world but will
+                // be extracted to the render world every frame.
+                // This makes it possible to control the effect from the main world.
+                // This plugin will take care of extracting it automatically.
+                // It's important to derive [`ExtractComponent`] on [`PostProcessingSettings`]
+                // for this plugin to work correctly.
+                ExtractComponentPlugin::<Globals>::default(),
+                // The settings will also be the data used in the shader.
+                // This plugin will prepare the component for the GPU by creating a uniform buffer
+                // and writing the data to that buffer every frame.
+                UniformComponentPlugin::<Globals>::default(),
+            ))
+            .add_systems(Update, update_uniforms);
 
         // We need to get the render app from the main app
         let Ok(render_app) = app.get_sub_app_mut(RenderApp) else {
@@ -152,18 +159,17 @@ impl ViewNode for FragmentNode {
         &'static ViewTarget,
         &'static FragmentHistoryTexture,
         &'static FragmentPipelineId,
+        &'static Globals,
     );
 
     fn run(
         &self,
         _graph: &mut RenderGraphContext,
         render_context: &mut RenderContext,
-        (camera, view_target, fragment_history_textures, fragment_pipeline_id): QueryItem<
-            Self::ViewQuery,
-        >,
+        (camera, view_target, fragment_history_textures, fragment_pipeline_id, _global_settings): QueryItem<Self::ViewQuery>,
         world: &World,
     ) -> Result<(), NodeRunError> {
-        let fragment_pipeline = world.resource::<FragmentPipeline>();
+        let post_process_pipeline = world.resource::<FragmentPipeline>();
         let pipeline_cache = world.resource::<PipelineCache>();
 
         // Get the pipeline from the cache
@@ -171,7 +177,10 @@ impl ViewNode for FragmentNode {
             return Ok(());
         };
 
-        let globals_buffer = world.resource::<GlobalsBuffer>();
+        let globals_uniforms = world.resource::<ComponentUniforms<Globals>>();
+        let Some(globals_binding) = globals_uniforms.uniforms().binding() else {
+            return Ok(());
+        };
 
         // This will start a new "post process write", obtaining two texture
         // views from the view target - a `source` and a `destination`.
@@ -180,7 +189,7 @@ impl ViewNode for FragmentNode {
         // [`ViewTarget`] will internally flip the [`ViewTarget`]'s main
         // texture to the `destination` texture. Failing to do so will cause
         // the current main texture information to be lost.
-        let fragment = view_target.post_process_write();
+        let post_process = view_target.post_process_write();
 
         // The bind_group gets created each frame.
         //
@@ -191,15 +200,15 @@ impl ViewNode for FragmentNode {
         // is to make sure you get it during the node execution.
         let bind_group = render_context.render_device().create_bind_group(
             "fragment_group",
-            &fragment_pipeline.group_layout,
+            &post_process_pipeline.group_layout,
             // It's important for this to match the BindGroupLayout defined in the PostProcessPipeline
             &BindGroupEntries::sequential((
                 // Make sure to use the source view
-                &globals_buffer.buffer,
-                fragment.source,
+                post_process.source,
                 &fragment_history_textures.read.default_view,
-                &fragment_pipeline.nearest_sampler,
-                &fragment_pipeline.linear_sampler,
+                &post_process_pipeline.nearest_sampler,
+                &post_process_pipeline.linear_sampler,
+                globals_binding.clone(),
             )),
         );
 
@@ -210,7 +219,7 @@ impl ViewNode for FragmentNode {
                 Some(RenderPassColorAttachment {
                     // We need to specify the post process destination view here
                     // to make sure we write to the appropriate texture.
-                    view: fragment.destination,
+                    view: post_process.destination,
                     resolve_target: None,
                     ops: Operations::default(),
                 }),
@@ -271,13 +280,13 @@ impl FromWorld for FragmentPipeline {
                 // The layout entries will only be visible in the fragment stage
                 ShaderStages::FRAGMENT,
                 (
-                    uniform_buffer::<GlobalsUniform>(false),
                     // The screen texture
                     texture_2d(TextureSampleType::Float { filterable: true }),
                     texture_2d(TextureSampleType::Float { filterable: true }),
                     // The sampler that will be used to sample the screen texture
                     sampler(SamplerBindingType::NonFiltering),
                     sampler(SamplerBindingType::Filtering),
+                    uniform_buffer::<Globals>(false),
                 ),
             ),
         );
@@ -294,9 +303,44 @@ impl FromWorld for FragmentPipeline {
     }
 }
 
+pub fn update_uniforms(
+    window_changed: Query<
+        // components
+        &Window,
+        // filters
+        Changed<Window>,
+    >,
+    mut global_query: Query<&mut Globals>,
+    time: Res<Time>,
+) {
+    for window in window_changed.iter() {
+        let res = &window.resolution;
+        let x = res.physical_width();
+        let y = res.physical_height();
+
+        info!("Updating resolution");
+
+        for mut global in global_query.iter_mut() {
+            global.resolution.x = x as f32;
+            global.resolution.y = y as f32;
+        }
+    }
+
+    for mut global in global_query.iter_mut() {
+        global.time = time.elapsed_seconds() as f32;
+    }
+}
+
 #[derive(Component, Reflect, Default, Clone)]
 pub struct FragmentSettings {
     pub reset: bool,
+}
+
+// This is the component that will get passed to the shader
+#[derive(Component, Default, Clone, Copy, ExtractComponent, ShaderType)]
+pub struct Globals {
+    pub resolution: Vec2,
+    pub time: f32,
 }
 
 fn prepare_fragment_history_textures(
@@ -410,15 +454,3 @@ impl SpecializedRenderPipeline for FragmentPipeline {
     }
 }
 
-#[derive(Component, Default, Clone, Copy, ExtractComponent, ShaderType)]
-pub struct OCTreeData {
-    tree: [i32; 2],
-}
-
-#[derive(Component, Default, Clone, Copy, ExtractComponent, ShaderType)]
-pub struct OCTree {
-    posi: Vec3,
-    // scle: vec3<f32>,
-    // chnk: array<vec2<i32>, 8>,
-    // data: array<vec2<i32>>,
-}

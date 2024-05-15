@@ -3,6 +3,7 @@ use fragment::{FragmentSettings, FragmentPlugin};
 
 mod fragment;
 mod js_reader;
+mod compute;
 
 use js_reader::CustomAssetReaderPlugin;
 

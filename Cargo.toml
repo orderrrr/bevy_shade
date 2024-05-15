@@ -4,13 +4,14 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-bevy = { version = "0.13.2", default-features = false, features = [
+bevy = { version = "0.13.0", default-features = false, features = [
     "bevy_asset",
     "bevy_core_pipeline",
     "bevy_render",
     "bevy_winit",
     "multi-threaded",
     "webgpu", 
+    "dynamic_linking"
     ] }
 wasm-bindgen = "0.2.92"
 web-sys = { version = "0.3", features = ["Window"] }
@@ -20,3 +21,11 @@ js-sys = "0.3"
 name = "bevy_shade"
 path = "lib/main.rs"
 
+[profile.dev]
+opt-level = 1
+
+[profile.dev.package."*"]
+opt-level = 3
+
+[toolchain]
+channel = "nightly"
