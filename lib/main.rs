@@ -1,9 +1,5 @@
-//! Implements a custom asset io loader.
-//! An [`AssetReader`] is what the asset server uses to read the raw bytes of assets.
-//! It does not know anything about the asset formats, only how to talk to the underlying storage.
-
 use bevy::{asset::AssetMetaCheck, prelude::*};
-use fragment::{FragmentSettings, PostProcessPlugin};
+use fragment::{FragmentSettings, FragmentPlugin};
 
 mod fragment;
 mod js_reader;
@@ -27,7 +23,7 @@ fn main() {
                     watch_for_changes_override: Some(true),
                     ..Default::default()
                 }),
-            PostProcessPlugin,
+            FragmentPlugin,
         ))
         .add_systems(Startup, setup)
         .run();

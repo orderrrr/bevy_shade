@@ -1,0 +1,218 @@
+@font-face {
+  font-family: "Dank Mono";
+  src: local("Dank Mono"), local("DankMono"), url("/fonts/DankMono-Regular.woff2");
+  font-weight: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Noto Emoji";
+  src: local("Noto Emoji"), local("NotoEmoji"), url("/fonts/NotoEmoji-VariableFont_wght.ttf");
+  font-weight: normal;
+  font-display: swap;
+}
+
+$base00: #1e1e2e; // base
+$base01: #181825; // mantle
+$base02: #313244; // surface0
+$base03: #45475a; // surface1
+$base04: #585b70; // surface2
+$base05: #cdd6f4; // text
+$base06: #f5e0dc; // rosewater
+$base07: #b4befe; // lavender
+$base08: #f38ba8; // red
+$base09: #fab387; // peach
+$base0A: #f9e2af; // yellow
+$base0B: #a6e3a1; // green
+$base0C: #94e2d5; // teal
+$base0D: #89b4fa; // blue
+$base0E: #cba6f7; // mauve
+$base0D: #f2cdcd; // flamingo
+
+// constants
+$pad00: 1em;
+$pad01: 0.5em;
+$pad02: 0.25em;
+
+$mrg00: $pad00;
+$mrg01: $pad01;
+$mrg02: $pad02;
+
+$bRad: 0.2em;
+$bWidth: 0.1em;
+
+$anim-duration: 4; // in seconds
+$anim-speed: 0.8; // in seconds
+
+$fSizeSidebar: 1.1rem;
+$fSizeEmoji: 1.6rem;
+
+// $sidebarWidth: 2rem;
+
+$minimum: 0px;
+$mobile: 500px;
+$tablet: 1000px;
+
+// The fact that we have to use a `max-width` media query here, so as to not
+// overlap with the next media query, is a quirk of postcss-css-variables
+@media (min-width: $minimum) and (max-width: ($mobile - 1px)) {
+  :root {
+    --sidebar-width: 3rem;
+    --sidebar-padding: 0rem;
+    --sidebar-font-emoji-size: 1.5rem;
+    --sidebar-font-size: 1rem;
+    --sidebar-chat-heading: 2.5rem;
+
+    --sidebar-elem-pad: 0.5rem;
+    --sidebar-elem-margin-separator: 0.25rem;
+
+    --margin-padding: 0rem;
+
+    --width: 100%;
+    --height: 100%;
+    --small-width: 100%;
+    --ex-small-width: 100%;
+    --small-height: auto;
+  }
+}
+
+@media (min-width: $mobile) and (max-width: ($tablet - 1px)) {
+  :root {
+    --sidebar-width: 3rem;
+    --sidebar-padding: 0rem;
+    --sidebar-font-emoji-size: 1.5rem;
+    --sidebar-font-size: 1rem;
+    --sidebar-chat-heading: 2.5rem;
+
+    --sidebar-elem-pad: 0.5rem;
+    --sidebar-elem-margin-separator: 0.25rem;
+
+    --margin-padding: 0rem;
+
+    --width: 100%;
+    --height: 100%;
+    --small-width: 80%;
+    --ex-small-width: 50%;
+    --small-height: auto;
+  }
+}
+
+@media (min-width: $tablet) {
+  :root {
+    --sidebar-width: 5rem;
+    --sidebar-padding: 0.5rem;
+    --sidebar-font-emoji-size: 1.5rem;
+    --sidebar-font-size: 1.2rem;
+    --sidebar-chat-heading: 2.5rem;
+
+    --sidebar-elem-pad: 0.9rem;
+    --sidebar-elem-margin-separator: 0.25rem;
+
+    --margin-padding: 0rem;
+
+    --width: 90%;
+    --ex-small-width: 25%;
+    --height: 90%;
+    --small-width: 50%;
+    --small-height: auto;
+  }
+}
+
+/* width */
+::-webkit-scrollbar {
+  width: 0.25rem;
+}
+
+/* Track */
+::-webkit-scrollbar-track {
+  right: -3rem;
+  top: -50rem;
+  background: transparent;
+  position: absolute;
+}
+
+/* Handle */
+::-webkit-scrollbar-thumb {
+  border-radius: $bRad;
+
+  background: $base04;
+}
+
+/* Handle on hover */
+::-webkit-scrollbar-thumb:hover {
+  background: $base05;
+}
+
+* {
+  box-sizing: border-box;
+
+  background: transparent;
+
+  margin: 0;
+  padding: 0;
+  border: 0;
+  outline: 0;
+
+  vertical-align: baseline;
+
+  overflow: hidden;
+
+  color: white;
+
+  font-size: 100%;
+  font-family: "Dank Mono";
+}
+
+main {
+  // background-color: goldenrod;
+  display: flex;
+
+  flex-wrap: wrap;
+
+  justify-content: center;
+  align-items: center;
+
+  width: 100vw;
+  height: 100vh;
+}
+
+.outer-panel {
+  padding-left: var(--sidebar-width);
+
+  width: 100%;
+  height: 100%;
+  position: relative;
+}
+
+.panel {
+  display: flex;
+
+  position: relative;
+
+  top: 50%;
+  left: 50%;
+
+  flex-direction: column;
+
+  border-radius: $bRad;
+  border-color: $base03;
+  border-width: $bWidth;
+
+  border-style: solid;
+
+  height: var(--height);
+  width: var(--width);
+
+  transform: translate(-50%, -50%);
+
+  padding: var(--sidebar-padding);
+}
+
+.noto {
+  font-family: "Noto Emoji";
+}
+
+h1 {
+  font-size: 1.8rem;
+  padding-bottom: $pad01;
+}

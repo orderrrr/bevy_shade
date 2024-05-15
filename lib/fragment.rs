@@ -29,9 +29,9 @@ use bevy::{
 pub const FRAGMENT_001: &str = "shaders/fragment.wgsl";
 
 /// It is generally encouraged to set up post-processing effects as a plugin
-pub struct PostProcessPlugin;
+pub struct FragmentPlugin;
 
-impl Plugin for PostProcessPlugin {
+impl Plugin for FragmentPlugin {
     fn build(&self, app: &mut App) {
         app.register_type::<FragmentSettings>();
 
@@ -151,7 +151,7 @@ impl ViewNode for FragmentNode {
         (camera, view_target, fragment_history_textures, fragment_pipeline_id): QueryItem<Self::ViewQuery>,
         world: &World,
     ) -> Result<(), NodeRunError> {
-        let post_process_pipeline = world.resource::<FragmentPipeline>();
+        let fragment_pipeline = world.resource::<FragmentPipeline>();
         let pipeline_cache = world.resource::<PipelineCache>();
 
         // Get the pipeline from the cache
@@ -168,7 +168,7 @@ impl ViewNode for FragmentNode {
         // [`ViewTarget`] will internally flip the [`ViewTarget`]'s main
         // texture to the `destination` texture. Failing to do so will cause
         // the current main texture information to be lost.
-        let post_process = view_target.post_process_write();
+        let fragment = view_target.post_process_write();
 
         // The bind_group gets created each frame.
         //
@@ -179,15 +179,15 @@ impl ViewNode for FragmentNode {
         // is to make sure you get it during the node execution.
         let bind_group = render_context.render_device().create_bind_group(
             "fragment_group",
-            &post_process_pipeline.group_layout,
+            &fragment_pipeline.group_layout,
             // It's important for this to match the BindGroupLayout defined in the PostProcessPipeline
             &BindGroupEntries::sequential((
                 // Make sure to use the source view
                 &globals_buffer.buffer,
-                post_process.source,
+                fragment.source,
                 &fragment_history_textures.read.default_view,
-                &post_process_pipeline.nearest_sampler,
-                &post_process_pipeline.linear_sampler,
+                &fragment_pipeline.nearest_sampler,
+                &fragment_pipeline.linear_sampler,
             )),
         );
 
@@ -198,7 +198,7 @@ impl ViewNode for FragmentNode {
                 Some(RenderPassColorAttachment {
                     // We need to specify the post process destination view here
                     // to make sure we write to the appropriate texture.
-                    view: post_process.destination,
+                    view: fragment.destination,
                     resolve_target: None,
                     ops: Operations::default(),
                 }),
