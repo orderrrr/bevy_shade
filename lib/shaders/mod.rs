@@ -31,9 +31,14 @@ pub struct OCTreeData {
 impl Default for OCTreeData {
 
     fn default() -> Self {
+        let mut voxels = BufferVec::new(BufferUsages::STORAGE);
+        let mut octree = BufferVec::new(BufferUsages::STORAGE);
+        octree.push(OCTree::default());
+        voxels.push(Voxel::default());
+
         OCTreeData {
-            voxels: BufferVec::new(BufferUsages::STORAGE),
-            octree: BufferVec::new(BufferUsages::STORAGE),
+            voxels,
+            octree,
         }
     }
 }

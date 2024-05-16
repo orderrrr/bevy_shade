@@ -409,16 +409,3 @@ impl SpecializedRenderPipeline for FragmentPipeline {
         }
     }
 }
-
-#[derive(Component, Default, Clone, Copy, ExtractComponent, ShaderType)]
-pub struct OCTreeData {
-    tree: [i32; 2],
-}
-
-#[derive(Component, Default, Clone, Copy, ExtractComponent, ShaderType)]
-pub struct OCTree {
-    posi: Vec3,
-    // scle: vec3<f32>,
-    // chnk: array<vec2<i32>, 8>,
-    // data: array<vec2<i32>>,
-}

@@ -130,9 +130,7 @@ impl FromWorld for ComputePipeline {
             ],
         );
 
-        let shader = world
-            .resource::<AssetServer>()
-            .load("shaders/compute.wgsl"); // TODO rename
+        let shader = world.resource::<AssetServer>().load("shaders/compute.wgsl"); // TODO rename
 
         let pipeline_cache = world.resource::<PipelineCache>();
 
@@ -203,12 +201,15 @@ impl Default for ComputeNode {
 
 impl Node for ComputeNode {
     fn update(&mut self, world: &mut World) {
+        let mut octree_data = world.resource_mut::<OCTreeData>();
+
+        octree_data.octree.push(OCTree { offset: 0, mask: 0 });
+        octree_data.voxels.push(Voxel { col: 0, mat: 0 });
+
         let pipeline = world.resource::<ComputePipeline>();
         let pipeline_cache = world.resource::<PipelineCache>();
 
-        {
-            self.update_state(pipeline_cache, pipeline);
-        }
+        self.update_state(pipeline_cache, pipeline);
     }
 
     fn run(
