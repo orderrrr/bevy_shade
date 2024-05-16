@@ -1,6 +1,5 @@
 use bevy::{asset::AssetMetaCheck, prelude::*};
-use shaders::fragment::{FragmentPlugin, FragmentSettings};
-use shaders::compute::ComputePlugin;
+use shaders::{compute::OCTreeComputePlugin, fragment::{FragmentPlugin, FragmentSettings}};
 
 mod js_reader;
 mod shaders;
@@ -24,7 +23,7 @@ fn main() {
                     watch_for_changes_override: Some(true),
                     ..Default::default()
                 }),
-            ComputePlugin,
+            OCTreeComputePlugin,
             FragmentPlugin,
         ))
         .add_systems(Startup, setup)

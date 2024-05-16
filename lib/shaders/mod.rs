@@ -1,29 +1,39 @@
-use bevy::{ecs::system::Resource, math::Vec4, render::{extract_resource::ExtractResource, render_resource::AsBindGroup}};
+use bevy::{
+    core::Pod,
+    ecs::prelude::*,
+    render::{extract_resource::ExtractResource, render_resource::*},
+};
+use bytemuck::Zeroable;
 
-mod compute;
-mod fragment;
+pub mod compute;
+pub mod fragment;
 
-#[derive(Resource, Clone, Deref, ExtractResource, AsBindGroup)]
+#[repr(C)]
+#[derive(Debug, Default, Clone, Copy, ShaderType, ExtractResource, Resource, Pod, Zeroable)]
 pub struct Voxel {
-    col: Vec4,
-    mat: i8, // TODO, maybe multiple mats here.
+    col: u32, // TODO - 64 bit colors.
+    mat: u32, // TODO, maybe multiple mats here.
 }
 
-#[derive(Resource, Clone, Deref, ExtractResource, AsBindGroup)]
+#[repr(C)]
+#[derive(Copy, Debug, Default, Clone, ShaderType, ExtractResource, Resource, Pod, Zeroable)]
 pub struct OCTree {
-    data: vec<i32>, // indexes
-    mask: i16,
+    offset: u32, // array offset in voxey/octree
+    mask: u32,
 }
 
-#[derive(Resource, Clone, Deref, ExtractResource, AsBindGroup)]
+#[derive(Resource, AsBindGroup)]
 pub struct OCTreeData {
-    voxels: vec<Voxel>,
-    octree: vec<OCTree>,
+    voxels: BufferVec<Voxel>,
+    octree: BufferVec<OCTree>,
 }
 
+impl Default for OCTreeData {
 
-#[derive(Resource, Clone, Deref, ExtractResource, AsBindGroup)]
-pub struct OCTreeDataBuffers {
-    buff00: OCTreeData,
-    buff01: OCTreeData,
+    fn default() -> Self {
+        OCTreeData {
+            voxels: BufferVec::new(BufferUsages::STORAGE),
+            octree: BufferVec::new(BufferUsages::STORAGE),
+        }
+    }
 }

@@ -11,11 +11,13 @@ bevy = { version = "0.13.0", default-features = false, features = [
     "bevy_winit",
     "multi-threaded",
     "webgpu", 
-    "dynamic_linking"
+    # "dynamic_linking"
     ] }
 wasm-bindgen = "0.2.92"
 web-sys = { version = "0.3", features = ["Window"] }
 js-sys = "0.3"
+bytemuck = "1.16.0"
+encase = "0.8.0"
 
 [[bin]]
 name = "bevy_shade"
@@ -29,3 +31,6 @@ opt-level = 3
 
 [toolchain]
 channel = "nightly"
+
+[build]
+target = "wasm32-unknown-unknown"

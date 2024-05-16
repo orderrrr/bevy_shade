@@ -1,22 +1,22 @@
 use bevy::{
     prelude::*,
     render::{
-        extract_resource::{ExtractResource, ExtractResourcePlugin},
-        render_asset::RenderAssets,
-        render_graph::{self, RenderGraph, RenderLabel},
-        render_resource::*,
+        render_graph::*,
+        render_resource::{BindGroup, BindGroupLayout, *},
         renderer::{RenderContext, RenderDevice},
         Render, RenderApp, RenderSet,
     },
 };
 use std::borrow::Cow;
 
-use super::{OCTreeData, OCTreeDataBuffers};
+use crate::shaders::OCTree;
 
-const WORKGROUP_X: u32 = 8;
-const WORKGROUP_Y: u32 = 8;
+use super::{OCTreeData, Voxel};
 
-struct OCTreeComputePlugin;
+const WORKGROUP_SIZE_X: u32 = 8;
+const WORKGROUP_SIZE_Y: u32 = 8;
+
+pub struct OCTreeComputePlugin;
 
 #[derive(Debug, Hash, PartialEq, Eq, Clone, RenderLabel)]
 struct ComputeLabel;
@@ -25,7 +25,6 @@ impl Plugin for OCTreeComputePlugin {
     fn build(&self, app: &mut App) {
         // Extract the game of life image resource from the main world into the render world
         // for operation on by the compute shader and display on the sprite.
-        app.add_plugins(ExtractResourcePlugin::<OCTreeDataBuffers>::default());
         let render_app = app.sub_app_mut(RenderApp);
         render_app.add_systems(
             Render,
@@ -39,6 +38,7 @@ impl Plugin for OCTreeComputePlugin {
 
     fn finish(&self, app: &mut App) {
         let render_app = app.sub_app_mut(RenderApp);
+        render_app.insert_resource(OCTreeData::default());
         render_app.init_resource::<ComputePipeline>();
     }
 }
@@ -49,15 +49,39 @@ struct ComputeBindGroup(BindGroup);
 fn prepare_bind_group(
     mut commands: Commands,
     pipeline: Res<ComputePipeline>,
-    octree_data: Res<OCTreeDataBuffers>,
+    octree_data: Res<OCTreeData>,
     render_device: Res<RenderDevice>,
 ) {
-    let view = octree_data.buff00;
+    let octree = &octree_data.octree;
+    let voxels = &octree_data.voxels;
+
+    info!("about to unwrap");
+
     let bind_group = render_device.create_bind_group(
         None,
         &pipeline.octree_bind_group_layout,
-        &BindGroupEntries::single(&view),
+        &[
+            BindGroupEntry {
+                binding: 0,
+                resource: BindingResource::Buffer(BufferBinding {
+                    buffer: octree.buffer().unwrap(),
+                    offset: 0,
+                    size: None,
+                }),
+            },
+            BindGroupEntry {
+                binding: 1,
+                resource: BindingResource::Buffer(BufferBinding {
+                    buffer: voxels.buffer().unwrap(),
+                    offset: 0,
+                    size: None,
+                }),
+            },
+        ],
     );
+
+    info!("done with unwrap");
+
     commands.insert_resource(ComputeBindGroup(bind_group));
 }
 
@@ -71,23 +95,59 @@ struct ComputePipeline {
 impl FromWorld for ComputePipeline {
     fn from_world(world: &mut World) -> Self {
         let render_device = world.resource::<RenderDevice>();
-        // TODO - CONTINUE HERE RENAING TO OCTREEDATABUFFERS WHERE NECESSARY
-        let octree_bind_group_layout = OCTreeData::bind_group_layout(render_device);
+
+        // TODO - DO this
+        // let limits = render_device.limits();
+        // bevy::log::info!(
+        //     "GPU limits:\n- max_compute_invocations_per_workgroup={}\n- max_compute_workgroup_size_x={}\n- max_compute_workgroup_size_y={}\n- max_compute_workgroup_size_z={}\n- max_compute_workgroups_per_dimension={}\n- min_storage_buffer_offset_alignment={}",
+        //     limits.max_compute_invocations_per_workgroup, limits.max_compute_workgroup_size_x, limits.max_compute_workgroup_size_y, limits.max_compute_workgroup_size_z,
+        //     limits.max_compute_workgroups_per_dimension, limits.min_storage_buffer_offset_alignment
+        // );
+
+        let octree_bind_group_layout = render_device.create_bind_group_layout(
+            "octree:bind_group_layout",
+            &[
+                BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: ShaderStages::COMPUTE,
+                    ty: BindingType::Buffer {
+                        ty: BufferBindingType::Storage { read_only: false },
+                        has_dynamic_offset: false,
+                        min_binding_size: Some(OCTree::min_size()),
+                    },
+                    count: None,
+                },
+                BindGroupLayoutEntry {
+                    binding: 1,
+                    visibility: ShaderStages::COMPUTE,
+                    ty: BindingType::Buffer {
+                        ty: BufferBindingType::Storage { read_only: false },
+                        has_dynamic_offset: false,
+                        min_binding_size: Some(Voxel::min_size()),
+                    },
+                    count: None,
+                },
+            ],
+        );
+
         let shader = world
             .resource::<AssetServer>()
-            .load("shaders/fragment.wgsl"); // TODO rename
+            .load("shaders/compute.wgsl"); // TODO rename
+
         let pipeline_cache = world.resource::<PipelineCache>();
+
         let init_pipeline = pipeline_cache.queue_compute_pipeline(ComputePipelineDescriptor {
             label: None,
-            layout: vec![octree_bind_group_layout.clone()],
+            layout: vec![],
             push_constant_ranges: Vec::new(),
             shader: shader.clone(),
             shader_defs: vec![],
             entry_point: Cow::from("init"),
         });
+
         let update_pipeline = pipeline_cache.queue_compute_pipeline(ComputePipelineDescriptor {
             label: None,
-            layout: vec![octree_bind_group_layout.clone()],
+            layout: vec![],
             push_constant_ranges: Vec::new(),
             shader,
             shader_defs: vec![],
@@ -111,21 +171,8 @@ enum ComputeState {
 struct ComputeNode {
     state: ComputeState,
 }
-
-impl Default for ComputeNode {
-    fn default() -> Self {
-        Self {
-            state: ComputeState::Loading,
-        }
-    }
-}
-
-impl render_graph::Node for ComputeNode {
-    fn update(&mut self, world: &mut World) {
-        let pipeline = world.resource::<ComputePipeline>();
-        let pipeline_cache = world.resource::<PipelineCache>();
-
-        // if the corresponding pipeline has loaded, transition to the next stage
+impl ComputeNode {
+    fn update_state(&mut self, pipeline_cache: &PipelineCache, pipeline: &ComputePipeline) {
         match self.state {
             ComputeState::Loading => {
                 if let CachedPipelineState::Ok(_) =
@@ -142,18 +189,37 @@ impl render_graph::Node for ComputeNode {
                 }
             }
             ComputeState::Update => {}
+        };
+    }
+}
+
+impl Default for ComputeNode {
+    fn default() -> Self {
+        Self {
+            state: ComputeState::Loading,
+        }
+    }
+}
+
+impl Node for ComputeNode {
+    fn update(&mut self, world: &mut World) {
+        let pipeline = world.resource::<ComputePipeline>();
+        let pipeline_cache = world.resource::<PipelineCache>();
+
+        {
+            self.update_state(pipeline_cache, pipeline);
         }
     }
 
     fn run(
         &self,
-        _graph: &mut render_graph::RenderGraphContext,
+        _graph: &mut RenderGraphContext,
         render_context: &mut RenderContext,
         world: &World,
-    ) -> Result<(), render_graph::NodeRunError> {
-        let compute_bind_group = &world.resource::<ComputeBindGroup>().0;
+    ) -> Result<(), NodeRunError> {
         let pipeline_cache = world.resource::<PipelineCache>();
         let pipeline = world.resource::<ComputePipeline>();
+        let compute_bind_group = &world.resource::<ComputeBindGroup>().0;
 
         let mut pass = render_context
             .command_encoder()

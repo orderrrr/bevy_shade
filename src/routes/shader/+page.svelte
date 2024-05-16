@@ -6,6 +6,29 @@
   import { oneDark } from "@codemirror/theme-one-dark";
   import { wgsl } from "@iizukak/codemirror-lang-wgsl";
 
+  let compute_value = 
+`// This shader computes the chromatic aberration effect
+#import bevy_core_pipeline::fullscreen_vertex_shader::FullscreenVertexOutput
+#import bevy_render::globals::Globals
+
+struct Voxel {
+    col: u32,
+    mat: u32,
+}
+
+pub struct OCTree {
+    offset: u32,
+    mask: u32,
+}
+
+@group(1) @binding(0) var<storage, read_write> particle_buffer : OCTree;
+@group(1) @binding(1) var<storage, read_write> indirect_buffer : Voxel;
+
+@compute @workgroup_size(16, 1, 1)
+fn compute(@builtin(global_invocation_id) invocation_id: vec3<u32>, @builtin(num_workgroups) num_workgroups: vec3<u32>) -> Output {
+}
+`;
+
   let value = 
 `// This shader computes the chromatic aberration effect
 #import bevy_core_pipeline::fullscreen_vertex_shader::FullscreenVertexOutput
@@ -63,6 +86,7 @@ fn fragment(in: FullscreenVertexOutput) -> Output {
 }
 `;
 
+  push_shader("shaders/compute.wgsl", compute_value);
   push_shader("shaders/fragment.wgsl", value);
 
   // so does work.
