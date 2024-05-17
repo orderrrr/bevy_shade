@@ -1,5 +1,8 @@
 use bevy::{asset::AssetMetaCheck, prelude::*};
-use shaders::{compute::OCTreeComputePlugin, fragment::{FragmentPlugin, FragmentSettings}};
+use shaders::{
+    compute::{MainWorldReceiver, OCTreeComputePlugin},
+    fragment::{FragmentPlugin, FragmentSettings},
+};
 
 mod js_reader;
 mod shaders;
@@ -8,7 +11,6 @@ use js_reader::CustomAssetReaderPlugin;
 
 fn main() {
     App::new()
-        .insert_resource(AssetMetaCheck::Never)
         .add_plugins((
             CustomAssetReaderPlugin,
             DefaultPlugins
@@ -21,12 +23,15 @@ fn main() {
                 })
                 .set(AssetPlugin {
                     watch_for_changes_override: Some(true),
+                    meta_check: AssetMetaCheck::Never,
                     ..Default::default()
                 }),
             OCTreeComputePlugin,
             FragmentPlugin,
         ))
         .add_systems(Startup, setup)
+        .add_systems(FixedUpdate, receive)
+        .insert_resource(Time::<Fixed>::from_seconds(10. /* one minute */))
         .run();
 }
 
@@ -42,4 +47,13 @@ fn setup(mut commands: Commands) {
         },
         FragmentSettings { reset: false },
     ));
+}
+
+/// This system will poll the channel and try to get the data sent from the render world
+fn receive(receiver: Res<MainWorldReceiver>) {
+    // We don't want to block the main world on this,
+    // so we use try_recv which attempts to receive without blocking
+    if let Ok(data) = receiver.try_recv() {
+        info!("Received data from render world: {data:?}");
+    }
 }

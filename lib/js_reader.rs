@@ -6,7 +6,9 @@ use bevy::app::{App, Plugin};
 use bevy::asset::AssetServer;
 use bevy::prelude::*;
 // import a JS function called `foo` from the module `mod`
-use bevy::asset::io::{AssetReader, AssetReaderError, AssetSource, AssetSourceId, Reader};
+use bevy::asset::io::{
+    AssetReader, AssetReaderError, AssetSource, AssetSourceId, ErasedAssetReader, Reader,
+};
 use bevy::asset::io::{PathStream, VecReader};
 use bevy::ecs::event::{Event, EventReader, EventWriter};
 use bevy::ecs::system::ResMut;
@@ -17,7 +19,7 @@ use bevy::utils::BoxedFuture;
 use wasm_bindgen::{prelude::wasm_bindgen, JsValue};
 
 /// A custom asset reader implementation that wraps a given asset reader implementation
-struct CustomAssetReader(Box<dyn AssetReader>);
+struct CustomAssetReader(Box<dyn ErasedAssetReader>);
 
 impl AssetReader for CustomAssetReader {
     fn read<'a>(
@@ -81,6 +83,7 @@ pub struct AssetChangeEvent(pub Vec<String>);
 pub fn check_update(mut ev_asset_change: EventWriter<AssetChangeEvent>) {
     let changes = get_changes();
     if !changes.is_empty() {
+        info!("asset change event.");
         ev_asset_change.send(AssetChangeEvent(changes));
     }
 }
@@ -127,40 +130,31 @@ pub fn get_meta_path(path: &Path) -> PathBuf {
 }
 
 impl AssetReader for JsWasmAssetReader {
-    fn read<'a>(
-        &'a self,
-        path: &'a Path,
-    ) -> BoxedFuture<'a, Result<Box<Reader<'a>>, AssetReaderError>> {
-        Box::pin(async move { self.fetch_bytes(path.to_string_lossy().to_string()).await })
+    async fn read<'a>(&'a self, path: &'a Path) -> Result<Box<Reader<'a>>, AssetReaderError> {
+        self.fetch_bytes(path.to_string_lossy().to_string()).await
     }
 
-    fn read_meta<'a>(
-        &'a self,
-        path: &'a Path,
-    ) -> BoxedFuture<'a, Result<Box<Reader<'a>>, AssetReaderError>> {
-        Box::pin(async move {
-            let meta_path = get_meta_path(&path);
-            Ok(self
-                .fetch_bytes(meta_path.to_string_lossy().to_string())
-                .await?)
-        })
+    async fn read_meta<'a>(&'a self, path: &'a Path) -> Result<Box<Reader<'a>>, AssetReaderError> {
+        let meta_path = get_meta_path(&path);
+        self.fetch_bytes(meta_path.to_string_lossy().to_string())
+            .await
     }
 
-    fn read_directory<'a>(
+    async fn read_directory<'a>(
         &'a self,
         _path: &'a Path,
-    ) -> BoxedFuture<'a, Result<Box<PathStream>, AssetReaderError>> {
+    ) -> Result<Box<PathStream>, AssetReaderError> {
         let stream: Box<PathStream> = Box::new(EmptyPathStream);
         error!("Reading directories is not supported with the HttpWasmAssetReader");
-        Box::pin(async move { Ok(stream) })
+        Ok(stream)
     }
 
-    fn is_directory<'a>(
+    async fn is_directory<'a>(
         &'a self,
         _path: &'a Path,
-    ) -> BoxedFuture<'a, std::result::Result<bool, AssetReaderError>> {
+    ) -> std::result::Result<bool, AssetReaderError> {
         error!("Reading directories is not supported with the HttpWasmAssetReader");
-        Box::pin(async move { Ok(false) })
+        Ok(false)
     }
 }
 

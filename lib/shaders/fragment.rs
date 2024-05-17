@@ -1,6 +1,5 @@
 use bevy::core::FrameCount;
 use bevy::render::camera::ExtractedCamera;
-use bevy::render::extract_component::ExtractComponent;
 use bevy::render::globals::{GlobalsBuffer, GlobalsUniform};
 use bevy::render::texture::{CachedTexture, TextureCache};
 use bevy::render::view::ExtractedView;
@@ -29,24 +28,19 @@ use bevy::{
 
 pub const FRAGMENT_001: &str = "shaders/fragment.wgsl";
 
-pub const BRICK_RES: i32 = 8_i32.pow(3);
-pub const OCTREE_SMALLEST: i32 = 8;
-pub const OCTREE_MAX_DEPTH: i32 = 1;
+// pub const BRICK_RES: i32 = 8_i32.pow(3);
+// pub const OCTREE_SMALLEST: i32 = 8;
+// pub const OCTREE_MAX_DEPTH: i32 = 1;
 
 /// It is generally encouraged to set up post-processing effects as a plugin
 pub struct FragmentPlugin;
 
 impl Plugin for FragmentPlugin {
     fn build(&self, app: &mut App) {
-        app.register_type::<FragmentSettings>().add_plugins((
-            // ExtractComponentPlugin::<Globals>::default(),
-            // UniformComponentPlugin::<Globals>::default(),
-            // ExtractComponentPlugin::<Globals>::default(),
-            // UniformComponentPlugin::<Globals>::default(),
-        ));
+        app.register_type::<FragmentSettings>().add_plugins(());
 
         // We need to get the render app from the main app
-        let Ok(render_app) = app.get_sub_app_mut(RenderApp) else {
+        let Some(render_app) = app.get_sub_app_mut(RenderApp) else {
             return;
         };
 
@@ -83,13 +77,13 @@ impl Plugin for FragmentPlugin {
                 Core2d,
                 // Specify the node ordering.
                 // This will automatically create all required node edges to enforce the given ordering.
-                (Node2d::MainPass, FragmentLabel, Node2d::Tonemapping),
+                (Node2d::EndMainPass, FragmentLabel, Node2d::Tonemapping),
             );
     }
 
     fn finish(&self, app: &mut App) {
         // We need to get the render app from the main app
-        let Ok(render_app) = app.get_sub_app_mut(RenderApp) else {
+        let Some(render_app) = app.get_sub_app_mut(RenderApp) else {
             return;
         };
 

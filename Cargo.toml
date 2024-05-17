@@ -4,20 +4,23 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-bevy = { version = "0.13.0", default-features = false, features = [
-    "bevy_asset",
-    "bevy_core_pipeline",
-    "bevy_render",
-    "bevy_winit",
-    "multi-threaded",
-    "webgpu", 
-    # "dynamic_linking"
-    ] }
+bevy = { git = "https://github.com/bevyengine/bevy", default-features = false, features = [
+  "bevy_asset",
+  "bevy_core_pipeline",
+  "bevy_render",
+  "bevy_winit",
+  "bevy_pbr", # can delete after: 13175 is resolved
+  "multi_threaded",
+  "webgpu",
+  # "dynamic_linking"
+] }
 wasm-bindgen = "0.2.92"
 web-sys = { version = "0.3", features = ["Window"] }
 js-sys = "0.3"
 bytemuck = "1.16.0"
 encase = "0.8.0"
+crossbeam-channel = "0.5.12"
+zerocopy = { version = "0.7.34", features = ["derive"] }
 
 [[bin]]
 name = "bevy_shade"

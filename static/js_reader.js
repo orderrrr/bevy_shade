@@ -4,24 +4,27 @@ const RESOURCES = {
 let CHANGES = [];
 
 export const fetch_shader = (path) => {
-  return RESOURCES[path];
+    console.log("getting shader: " + path);
+    return RESOURCES[path];
 };
 
 export const get_js_changes = () => {
-  const res =  [...CHANGES];
+    console.log("getting changes");
 
-  CHANGES = [];
+    const res = [...CHANGES];
 
-  return res;
+    CHANGES = [];
+
+    return res;
 
 }
 
 export const push_shader = (path, data) => {
 
-  RESOURCES[path] = data;
+    RESOURCES[path] = data;
 
-  if (!CHANGES.includes(path)) {
+    if (!CHANGES.includes(path)) {
 
-    CHANGES.push(path);
-  }
+        CHANGES.push(path);
+    }
 };
