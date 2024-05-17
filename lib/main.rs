@@ -30,7 +30,7 @@ fn main() {
             FragmentPlugin,
         ))
         .add_systems(Startup, setup)
-        .add_systems(FixedUpdate, receive)
+        // .add_systems(FixedUpdate, receive)
         .insert_resource(Time::<Fixed>::from_seconds(10. /* one minute */))
         .run();
 }

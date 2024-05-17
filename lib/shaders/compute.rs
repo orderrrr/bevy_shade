@@ -3,7 +3,11 @@ use std::borrow::Cow;
 use bevy::{
     prelude::*,
     render::{
-        graph::CameraDriverLabel, render_graph::*, render_resource::{binding_types::storage_buffer, BindGroup, BindGroupLayout, *}, renderer::{RenderContext, RenderDevice}, Render, RenderApp, RenderSet
+        graph::CameraDriverLabel,
+        render_graph::*,
+        render_resource::{binding_types::storage_buffer, BindGroup, BindGroupLayout, *},
+        renderer::{RenderContext, RenderDevice},
+        Render, RenderApp, RenderSet,
     },
 };
 use crossbeam_channel::{Receiver, Sender};
@@ -30,9 +34,11 @@ impl Plugin for OCTreeComputePlugin {
                         .in_set(RenderSet::PrepareBindGroups)
                         // We don't need to recreate the bind group every frame
                         .run_if(not(resource_exists::<ComputeBindGroup>)),
+                    // use this if we want to communicate with the cpu
+                    //
                     // We need to run it after the render graph is done
                     // because this needs to happen after submit()
-                    map_and_read_buffer.after(RenderSet::Render),
+                    // map_and_read_buffer.after(RenderSet::Render),
                 ),
             );
 
@@ -42,10 +48,9 @@ impl Plugin for OCTreeComputePlugin {
     }
 
     fn finish(&self, app: &mut App) {
-
         let render_app = app.sub_app_mut(RenderApp);
         render_app.init_resource::<ComputePipeline>();
-        render_app.init_resource::<Buffers>();
+        render_app.init_resource::<ComputeBuffers>();
     }
 }
 
@@ -57,14 +62,14 @@ pub struct MainWorldReceiver(Receiver<Vec<OCTree>>);
 struct RenderWorldSender(Sender<Vec<OCTree>>);
 
 #[derive(Resource)]
-struct Buffers {
+pub struct ComputeBuffers {
     // The buffer that will be used by the compute shader
-    buffer_len: usize,
-    octree_gpu: Buffer,
-    octree_cpu: Buffer,
+    pub buffer_len: usize,
+    pub octree_gpu: Buffer,
+    pub octree_cpu: Buffer,
 }
 
-impl FromWorld for Buffers {
+impl FromWorld for ComputeBuffers {
     fn from_world(world: &mut World) -> Self {
         let buffer_len = BUFFER_LEN;
         let render_device = world.resource::<RenderDevice>();
@@ -77,7 +82,8 @@ impl FromWorld for Buffers {
         let gpu_buffer = render_device.create_buffer_with_data(&BufferInitDescriptor {
             label: Some("gpu_buffer"),
             contents: init_data.as_ref(),
-            usage: BufferUsages::STORAGE | BufferUsages::COPY_SRC,
+            // usage: BufferUsages::STORAGE | BufferUsages::COPY_SRC, // use this if we want to communicate with the cpu
+            usage: BufferUsages::STORAGE,
         });
         // For portability reasons, WebGPU draws a distinction between memory that is
         // accessible by the CPU and memory that is accessible by the GPU. Only
@@ -107,7 +113,7 @@ fn prepare_bind_group(
     mut commands: Commands,
     pipeline: Res<ComputePipeline>,
     render_device: Res<RenderDevice>,
-    buffers: Res<Buffers>,
+    buffers: Res<ComputeBuffers>,
 ) {
     let bind_group = render_device.create_bind_group(
         None,
@@ -149,7 +155,7 @@ impl FromWorld for ComputePipeline {
 
 fn map_and_read_buffer(
     render_device: Res<RenderDevice>,
-    buffers: Res<Buffers>,
+    buffers: Res<ComputeBuffers>,
     sender: Res<RenderWorldSender>,
 ) {
     // Finally time to get our data back from the gpu.
@@ -239,7 +245,7 @@ impl Node for ComputeNode {
         let pipeline = world.resource::<ComputePipeline>();
         let pipeline_cache = world.resource::<PipelineCache>();
 
-        let buffers = world.resource::<Buffers>();
+        let buffers = world.resource::<ComputeBuffers>();
 
         if let Some(init_pipeline) = pipeline_cache.get_compute_pipeline(pipeline.pipeline) {
             let mut pass =
@@ -255,14 +261,15 @@ impl Node for ComputeNode {
             pass.dispatch_workgroups(buffers.buffer_len as u32, 1, 1);
         }
 
-        // Copy the gpu accessible buffer to the cpu accessible buffer
-        render_context.command_encoder().copy_buffer_to_buffer(
-            &buffers.octree_gpu,
-            0,
-            &buffers.octree_cpu,
-            0,
-            (buffers.buffer_len * std::mem::size_of::<OCTree>()) as u64,
-        );
+        // use this if we want to communicate with the cpu
+        // // Copy the gpu accessible buffer to the cpu accessible buffer
+        // render_context.command_encoder().copy_buffer_to_buffer(
+        //     &buffers.octree_gpu,
+        //     0,
+        //     &buffers.octree_cpu,
+        //     0,
+        //     (buffers.buffer_len * std::mem::size_of::<OCTree>()) as u64,
+        // );
 
         Ok(())
     }

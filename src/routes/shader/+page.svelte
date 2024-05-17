@@ -6,18 +6,18 @@
     import { oneDark } from "@codemirror/theme-one-dark";
     import { wgsl } from "@iizukak/codemirror-lang-wgsl";
 
-    let compute_value = `// This shader computes the chromatic aberration effect
-#import bevy_render::globals::Globals
-
-pub struct OCTree {
-    offset: u32,
-    mask: u32,
+    let compute_value = 
+`struct OCTree {
+    @location(0) offset: u32,
+    @location(1) mask: u32,
 }
 
 @group(0) @binding(0) var<storage, read_write> data: array<OCTree>;
 
-@compute @workgroup_size(1)
+@compute @workgroup_size(128)
 fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
+    data[0].offset = 1u;
+    data[0].mask = 2u;
 }
 `;
 
@@ -25,13 +25,19 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
 #import bevy_core_pipeline::fullscreen_vertex_shader::FullscreenVertexOutput
 #import bevy_render::globals::Globals
 
+struct OCTree {
+    @location(0) offset: u32,
+    @location(1) mask: u32,
+}
+
 @group(0) @binding(0) var<uniform> globals: Globals;
+@group(0) @binding(1) var<storage, read> data: array<OCTree>;
 
-@group(0) @binding(1) var screen_texture: texture_2d<f32>;
-@group(0) @binding(2) var prev_frame: texture_2d<f32>;
+@group(0) @binding(2) var screen_texture: texture_2d<f32>;
+@group(0) @binding(3) var prev_frame: texture_2d<f32>;
 
-@group(0) @binding(3) var nearest_sampler: sampler;
-@group(0) @binding(4) var linear_sampler: sampler;
+@group(0) @binding(4) var nearest_sampler: sampler;
+@group(0) @binding(5) var linear_sampler: sampler;
 
 struct Output {
   @location(0) view_target: vec4<f32>,
@@ -51,9 +57,15 @@ fn fragment(in: FullscreenVertexOutput) -> Output {
         1.0
     );
 
+    col = vec4(sin(globals.time), cos(globals.time), 0.0, 1.0);
+
+    if (data[0].offset == 1) {
+        col = vec4(0., 1., 1., 1.);
+    }
+
     var out: Output;
     out.history = vec4(col);
-    out.view_target = vec4(1.0);
+    out.view_target = vec4(col);
     return out;
 }
 `;
