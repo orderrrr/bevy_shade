@@ -179,8 +179,6 @@ fn map_and_read_buffer(
     // It may also be worth noting that although on native, the usage of asynchronous
     // channels is wholly unnecessary, for the sake of portability to WASM
     // we'll use async channels that work on both native and WASM.
-    
-    info!("GOT TO Start of map and read");
 
     let (s, r) = crossbeam_channel::unbounded::<()>();
 
@@ -199,8 +197,6 @@ fn map_and_read_buffer(
     // This blocks until the gpu is done executing everything
     render_device.poll(Maintain::wait()).panic_on_timeout();
 
-    info!("GOT TO middle of map and read");
-
     // This blocks until the buffer is mapped
     r.recv().expect("Failed to receive the map_async message");
 
@@ -217,8 +213,6 @@ fn map_and_read_buffer(
             .send(data)
             .expect("Failed to send data to main world");
     }
-
-    info!("GOT TO end of map and read");
 
     // We need to make sure all `BufferView`'s are dropped before we do what we're about
     // to do.
@@ -261,14 +255,14 @@ impl Node for ComputeNode {
             pass.dispatch_workgroups(buffers.buffer_len as u32, 1, 1);
         }
 
-        // // Copy the gpu accessible buffer to the cpu accessible buffer
-        // render_context.command_encoder().copy_buffer_to_buffer(
-        //     &buffers.octree_gpu,
-        //     0,
-        //     &buffers.octree_cpu,
-        //     0,
-        //     (buffers.buffer_len * std::mem::size_of::<OCTree>()) as u64,
-        // );
+        // Copy the gpu accessible buffer to the cpu accessible buffer
+        render_context.command_encoder().copy_buffer_to_buffer(
+            &buffers.octree_gpu,
+            0,
+            &buffers.octree_cpu,
+            0,
+            (buffers.buffer_len * std::mem::size_of::<OCTree>()) as u64,
+        );
 
         Ok(())
     }
