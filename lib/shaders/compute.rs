@@ -1,21 +1,32 @@
-use std::borrow::Cow;
-
 use bevy::{
     prelude::*,
     render::{
+        globals::{GlobalsBuffer, GlobalsUniform},
         graph::CameraDriverLabel,
         render_graph::*,
-        render_resource::{binding_types::storage_buffer, BindGroup, BindGroupLayout, *},
+        render_resource::{
+            binding_types::{storage_buffer, uniform_buffer},
+            BindGroup, BindGroupLayout, *,
+        },
         renderer::{RenderContext, RenderDevice},
         Render, RenderApp, RenderSet,
     },
 };
+use bytemuck::Zeroable;
 use crossbeam_channel::{Receiver, Sender};
-use zerocopy::FromBytes;
+use zerocopy::{FromBytes, FromZeroes};
 
 use crate::shaders::OCTree;
 
-const BUFFER_LEN: usize = 128;
+use super::Voxel;
+
+// TODO re-look at this
+const MAX_OCTREE: usize = 1;
+const OCTREE_DEPTH: usize = 1;
+const OCTREE_SUB_COUNT: usize = OCTREE_DEPTH * 8;
+const VOXEL_SINGLE_MAX_SIZE: usize = OCTREE_COUNT * 8;
+const OCTREE_COUNT: usize = OCTREE_SUB_COUNT * MAX_OCTREE; // one octree for now
+const VOXEL_COUNT: usize = VOXEL_SINGLE_MAX_SIZE * MAX_OCTREE; // one octree for now
 
 pub struct OCTreeComputePlugin;
 
@@ -63,24 +74,24 @@ struct RenderWorldSender(Sender<Vec<OCTree>>);
 
 #[derive(Resource)]
 pub struct ComputeBuffers {
-    // The buffer that will be used by the compute shader
-    pub buffer_len: usize,
     pub octree_gpu: Buffer,
     pub octree_cpu: Buffer,
+
+    pub voxel_gpu: Buffer,
+    pub voxel_cpu: Buffer,
 }
 
 impl FromWorld for ComputeBuffers {
     fn from_world(world: &mut World) -> Self {
-        let buffer_len = BUFFER_LEN;
         let render_device = world.resource::<RenderDevice>();
 
         let mut init_data = encase::StorageBuffer::new(Vec::new());
-        let data = vec![OCTree::default(); buffer_len];
+        let data = vec![OCTree::zeroed(); OCTREE_COUNT];
         init_data.write(&data).expect("failed to write buffer");
 
         // The buffer that will be accessed by the gpu
-        let gpu_buffer = render_device.create_buffer_with_data(&BufferInitDescriptor {
-            label: Some("gpu_buffer"),
+        let octree_gpu_buffer = render_device.create_buffer_with_data(&BufferInitDescriptor {
+            label: Some("octree_gpu_buffer"),
             contents: init_data.as_ref(),
             // usage: BufferUsages::STORAGE | BufferUsages::COPY_SRC, // use this if we want to communicate with the cpu
             usage: BufferUsages::STORAGE,
@@ -91,17 +102,47 @@ impl FromWorld for ComputeBuffers {
         // only buffers visible to the GPU can be used in shaders. In order to get
         // data from the GPU, we need to use `CommandEncoder::copy_buffer_to_buffer` to
         // copy the buffer modified by the GPU into a mappable, CPU-accessible buffer
-        let cpu_buffer = render_device.create_buffer(&BufferDescriptor {
-            label: Some("readback_buffer"),
-            size: (buffer_len * std::mem::size_of::<OCTree>()) as u64,
+        let octree_cpu_buffer = render_device.create_buffer(&BufferDescriptor {
+            label: Some("octree_readback_buffer"),
+            size: (OCTREE_COUNT * std::mem::size_of::<OCTree>()) as u64,
             usage: BufferUsages::MAP_READ | BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
 
+        let render_device = world.resource::<RenderDevice>();
+
+        let mut init_data = encase::StorageBuffer::new(Vec::new());
+        let data = vec![Voxel::zeroed(); VOXEL_COUNT];
+        init_data.write(&data).expect("failed to write buffer");
+
+        // The buffer that will be accessed by the gpu
+        let voxel_gpu_buffer = render_device.create_buffer_with_data(&BufferInitDescriptor {
+            label: Some("voxel_gpu_buffer"),
+            contents: init_data.as_ref(),
+            // usage: BufferUsages::STORAGE | BufferUsages::COPY_SRC, // use this if we want to communicate with the cpu
+            usage: BufferUsages::STORAGE,
+        });
+
+        // For portability reasons, WebGPU draws a distinction between memory that is
+        // accessible by the CPU and memory that is accessible by the GPU. Only
+        // buffers accessible by the CPU can be mapped and accessed by the CPU and
+        // only buffers visible to the GPU can be used in shaders. In order to get
+        // data from the GPU, we need to use `CommandEncoder::copy_buffer_to_buffer` to
+        // copy the buffer modified by the GPU into a mappable, CPU-accessible buffer
+        let voxel_cpu_buffer = render_device.create_buffer(&BufferDescriptor {
+            label: Some("voxel_readback_buffer"),
+            size: (VOXEL_COUNT * std::mem::size_of::<Voxel>()) as u64,
+            usage: BufferUsages::MAP_READ | BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+
+
         Self {
-            buffer_len,
-            octree_gpu: gpu_buffer,
-            octree_cpu: cpu_buffer,
+            octree_gpu: octree_gpu_buffer,
+            octree_cpu: octree_cpu_buffer,
+
+            voxel_gpu: voxel_gpu_buffer,
+            voxel_cpu: voxel_cpu_buffer,
         }
     }
 }
@@ -114,11 +155,16 @@ fn prepare_bind_group(
     pipeline: Res<ComputePipeline>,
     render_device: Res<RenderDevice>,
     buffers: Res<ComputeBuffers>,
+    globals: Res<GlobalsBuffer>,
 ) {
     let bind_group = render_device.create_bind_group(
         None,
         &pipeline.layout,
-        &BindGroupEntries::single(buffers.octree_gpu.as_entire_binding()),
+        &BindGroupEntries::sequential((
+            &globals.buffer,
+            buffers.octree_gpu.as_entire_binding(),
+            buffers.voxel_gpu.as_entire_binding(),
+        )),
     );
     commands.insert_resource(ComputeBindGroup(bind_group));
 }
@@ -134,9 +180,13 @@ impl FromWorld for ComputePipeline {
         let render_device = world.resource::<RenderDevice>();
         let layout = render_device.create_bind_group_layout(
             "ComputeOCTree",
-            &BindGroupLayoutEntries::single(
+            &BindGroupLayoutEntries::sequential(
                 ShaderStages::COMPUTE,
-                storage_buffer::<Vec<OCTree>>(false),
+                (
+                    uniform_buffer::<GlobalsUniform>(false),
+                    storage_buffer::<Vec<OCTree>>(false),
+                    storage_buffer::<Vec<Voxel>>(false),
+                ),
             ),
         );
         let shader = world.load_asset("shaders/compute.wgsl"); // TODO rename
@@ -245,7 +295,7 @@ impl Node for ComputeNode {
         let pipeline = world.resource::<ComputePipeline>();
         let pipeline_cache = world.resource::<PipelineCache>();
 
-        let buffers = world.resource::<ComputeBuffers>();
+        // let buffers = world.resource::<ComputeBuffers>();
 
         if let Some(init_pipeline) = pipeline_cache.get_compute_pipeline(pipeline.pipeline) {
             let mut pass =
@@ -258,7 +308,7 @@ impl Node for ComputeNode {
 
             pass.set_bind_group(0, &bind_group, &[]);
             pass.set_pipeline(init_pipeline);
-            pass.dispatch_workgroups(buffers.buffer_len as u32, 1, 1);
+            pass.dispatch_workgroups(1, 8, 1);
         }
 
         // use this if we want to communicate with the cpu

@@ -1,7 +1,7 @@
 use bevy::core::FrameCount;
 use bevy::render::camera::ExtractedCamera;
 use bevy::render::globals::{GlobalsBuffer, GlobalsUniform};
-use bevy::render::render_resource::binding_types::{storage_buffer, storage_buffer_read_only};
+use bevy::render::render_resource::binding_types::storage_buffer_read_only;
 use bevy::render::texture::{CachedTexture, TextureCache};
 use bevy::render::view::ExtractedView;
 use bevy::render::{MainWorld, Render, RenderSet};
@@ -28,7 +28,7 @@ use bevy::{
 };
 
 use super::compute::ComputeBuffers;
-use super::OCTree;
+use super::{OCTree, Voxel};
 
 pub const FRAGMENT_001: &str = "shaders/fragment.wgsl";
 
@@ -62,7 +62,6 @@ impl Plugin for FragmentPlugin {
             //
             // The [`ViewNodeRunner`] is a special [`Node`] that will automatically run the node for each view
             // matching the [`ViewQuery`]
-
             .init_resource::<SpecializedRenderPipelines<FragmentPipeline>>()
             .add_systems(ExtractSchedule, extract_fragment_settings)
             .add_systems(
@@ -171,7 +170,8 @@ impl ViewNode for FragmentNode {
         };
 
         let globals_buffer = world.resource::<GlobalsBuffer>();
-        let compute_cpu = &world.resource::<ComputeBuffers>().octree_gpu;
+        let octree_cpu = &world.resource::<ComputeBuffers>().octree_gpu;
+        let voxel_cpu = &world.resource::<ComputeBuffers>().voxel_gpu;
 
         // This will start a new "post process write", obtaining two texture
         // views from the view target - a `source` and a `destination`.
@@ -196,7 +196,8 @@ impl ViewNode for FragmentNode {
             &BindGroupEntries::sequential((
                 // Make sure to use the source view
                 &globals_buffer.buffer,
-                compute_cpu.as_entire_binding(),
+                octree_cpu.as_entire_binding(),
+                voxel_cpu.as_entire_binding(),
                 fragment.source,
                 &fragment_history_textures.read.default_view,
                 &fragment_pipeline.nearest_sampler,
@@ -274,6 +275,7 @@ impl FromWorld for FragmentPipeline {
                 (
                     uniform_buffer::<GlobalsUniform>(false),
                     storage_buffer_read_only::<Vec<OCTree>>(false),
+                    storage_buffer_read_only::<Vec<Voxel>>(false),
                     // The screen texture
                     texture_2d(TextureSampleType::Float { filterable: true }),
                     texture_2d(TextureSampleType::Float { filterable: true }),
