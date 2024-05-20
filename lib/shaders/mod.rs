@@ -46,6 +46,25 @@ pub struct OCTree {
     mask: u32,
 }
 
+#[repr(C)]
+#[derive(
+    Copy,
+    Debug,
+    Default,
+    Clone,
+    ShaderType,
+    ExtractResource,
+    Resource,
+    Pod,
+    Zeroable,
+    FromBytes,
+    FromZeroes,
+)]
+struct OCTreeSettings {
+    depth: u32,
+    scale: f32,
+}
+
 // #[derive(Resource, AsBindGroup)]
 // pub struct OCTreeData {
 //     // voxels: BufferVec<Voxel>,

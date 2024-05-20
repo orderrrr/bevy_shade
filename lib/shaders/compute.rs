@@ -1,5 +1,3 @@
-use std::cmp::{max, min};
-
 use bevy::{
     prelude::*,
     render::{
@@ -11,7 +9,6 @@ use bevy::{
             BindGroup, BindGroupLayout, *,
         },
         renderer::{RenderContext, RenderDevice},
-        view::calculate_bounds,
         Render, RenderApp, RenderSet,
     },
 };
@@ -21,7 +18,7 @@ use js_sys::Math::pow;
 
 use crate::shaders::OCTree;
 
-use super::Voxel;
+use super::{OCTreeSettings, Voxel};
 
 // TODO re-look at this
 const MAX_OCTREE: usize = 1;
@@ -156,6 +153,7 @@ fn prepare_bind_group(
     render_device: Res<RenderDevice>,
     buffers: Res<ComputeBuffers>,
     globals: Res<GlobalsBuffer>,
+    octree_settings: Res<OCTreeSettings>, // TODO
 ) {
     let bind_group = render_device.create_bind_group(
         None,
