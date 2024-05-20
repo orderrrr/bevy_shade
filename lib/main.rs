@@ -1,6 +1,6 @@
 use bevy::{asset::AssetMetaCheck, prelude::*};
 use shaders::{
-    compute::{MainWorldReceiver, OCTreeComputePlugin},
+    compute::OCTreeComputePlugin,
     fragment::{FragmentPlugin, FragmentSettings},
 };
 
@@ -49,11 +49,12 @@ fn setup(mut commands: Commands) {
     ));
 }
 
-/// This system will poll the channel and try to get the data sent from the render world
-fn receive(receiver: Res<MainWorldReceiver>) {
-    // We don't want to block the main world on this,
-    // so we use try_recv which attempts to receive without blocking
-    if let Ok(data) = receiver.try_recv() {
-        info!("Received data from render world: {data:?}");
-    }
-}
+// TODO - remove this
+// /// This system will poll the channel and try to get the data sent from the render world
+// fn receive(receiver: Res<MainWorldReceiver>) {
+//     // We don't want to block the main world on this,
+//     // so we use try_recv which attempts to receive without blocking
+//     if let Ok(data) = receiver.try_recv() {
+//         info!("Received data from render world: {data:?}");
+//     }
+// }

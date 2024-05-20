@@ -14,7 +14,6 @@ use bevy::{
 };
 use bytemuck::Zeroable;
 use crossbeam_channel::{Receiver, Sender};
-use zerocopy::{FromBytes, FromZeroes};
 
 use crate::shaders::OCTree;
 
@@ -136,7 +135,6 @@ impl FromWorld for ComputeBuffers {
             mapped_at_creation: false,
         });
 
-
         Self {
             octree_gpu: octree_gpu_buffer,
             octree_cpu: octree_cpu_buffer,
@@ -203,78 +201,79 @@ impl FromWorld for ComputePipeline {
     }
 }
 
-fn map_and_read_buffer(
-    render_device: Res<RenderDevice>,
-    buffers: Res<ComputeBuffers>,
-    sender: Res<RenderWorldSender>,
-) {
-    // Finally time to get our data back from the gpu.
-    // First we get a buffer slice which represents a chunk of the buffer (which we
-    // can't access yet).
-    // We want the whole thing so use unbounded range.
-    let buffer_slice = buffers.octree_cpu.slice(..);
+// use this if we want to communicate with the cpu
+// fn map_and_read_buffer(
+//     render_device: Res<RenderDevice>,
+//     buffers: Res<ComputeBuffers>,
+//     sender: Res<RenderWorldSender>,
+// ) {
+//     // Finally time to get our data back from the gpu.
+//     // First we get a buffer slice which represents a chunk of the buffer (which we
+//     // can't access yet).
+//     // We want the whole thing so use unbounded range.
+//     let buffer_slice = buffers.octree_cpu.slice(..);
 
-    // Now things get complicated. WebGPU, for safety reasons, only allows either the GPU
-    // or CPU to access a buffer's contents at a time. We need to "map" the buffer which means
-    // flipping ownership of the buffer over to the CPU and making access legal. We do this
-    // with `BufferSlice::map_async`.
-    //
-    // The problem is that map_async is not an async function so we can't await it. What
-    // we need to do instead is pass in a closure that will be executed when the slice is
-    // either mapped or the mapping has failed.
-    //
-    // The problem with this is that we don't have a reliable way to wait in the main
-    // code for the buffer to be mapped and even worse, calling get_mapped_range or
-    // get_mapped_range_mut prematurely will cause a panic, not return an error.
-    //
-    // Using channels solves this as awaiting the receiving of a message from
-    // the passed closure will force the outside code to wait. It also doesn't hurt
-    // if the closure finishes before the outside code catches up as the message is
-    // buffered and receiving will just pick that up.
-    //
-    // It may also be worth noting that although on native, the usage of asynchronous
-    // channels is wholly unnecessary, for the sake of portability to WASM
-    // we'll use async channels that work on both native and WASM.
+//     // Now things get complicated. WebGPU, for safety reasons, only allows either the GPU
+//     // or CPU to access a buffer's contents at a time. We need to "map" the buffer which means
+//     // flipping ownership of the buffer over to the CPU and making access legal. We do this
+//     // with `BufferSlice::map_async`.
+//     //
+//     // The problem is that map_async is not an async function so we can't await it. What
+//     // we need to do instead is pass in a closure that will be executed when the slice is
+//     // either mapped or the mapping has failed.
+//     //
+//     // The problem with this is that we don't have a reliable way to wait in the main
+//     // code for the buffer to be mapped and even worse, calling get_mapped_range or
+//     // get_mapped_range_mut prematurely will cause a panic, not return an error.
+//     //
+//     // Using channels solves this as awaiting the receiving of a message from
+//     // the passed closure will force the outside code to wait. It also doesn't hurt
+//     // if the closure finishes before the outside code catches up as the message is
+//     // buffered and receiving will just pick that up.
+//     //
+//     // It may also be worth noting that although on native, the usage of asynchronous
+//     // channels is wholly unnecessary, for the sake of portability to WASM
+//     // we'll use async channels that work on both native and WASM.
 
-    let (s, r) = crossbeam_channel::unbounded::<()>();
+//     let (s, r) = crossbeam_channel::unbounded::<()>();
 
-    // Maps the buffer so it can be read on the cpu
-    buffer_slice.map_async(MapMode::Read, move |r| match r {
-        // This will execute once the gpu is ready, so after the call to poll()
-        Ok(_) => s.send(()).expect("Failed to send map update"),
-        Err(err) => panic!("Failed to map buffer {err}"),
-    });
+//     // Maps the buffer so it can be read on the cpu
+//     buffer_slice.map_async(MapMode::Read, move |r| match r {
+//         // This will execute once the gpu is ready, so after the call to poll()
+//         Ok(_) => s.send(()).expect("Failed to send map update"),
+//         Err(err) => panic!("Failed to map buffer {err}"),
+//     });
 
-    // In order for the mapping to be completed, one of three things must happen.
-    // One of those can be calling `Device::poll`. This isn't necessary on the web as devices
-    // are polled automatically but natively, we need to make sure this happens manually.
-    // `Maintain::Wait` will cause the thread to wait on native but not on WebGpu.
+//     // In order for the mapping to be completed, one of three things must happen.
+//     // One of those can be calling `Device::poll`. This isn't necessary on the web as devices
+//     // are polled automatically but natively, we need to make sure this happens manually.
+//     // `Maintain::Wait` will cause the thread to wait on native but not on WebGpu.
 
-    // This blocks until the gpu is done executing everything
-    render_device.poll(Maintain::wait()).panic_on_timeout();
+//     // This blocks until the gpu is done executing everything
+//     render_device.poll(Maintain::wait()).panic_on_timeout();
 
-    // This blocks until the buffer is mapped
-    r.recv().expect("Failed to receive the map_async message");
+//     // This blocks until the buffer is mapped
+//     r.recv().expect("Failed to receive the map_async message");
 
-    {
-        let buffer_view = buffer_slice.get_mapped_range();
-        let data = buffer_view
-            .chunks(std::mem::size_of::<OCTree>())
-            .map(|chunk| {
-                OCTree::read_from(chunk.try_into().expect("should be a u32"))
-                    .expect("error check here")
-            })
-            .collect::<Vec<OCTree>>();
-        sender
-            .send(data)
-            .expect("Failed to send data to main world");
-    }
+//     {
+//         let buffer_view = buffer_slice.get_mapped_range();
+//         let data = buffer_view
+//             .chunks(std::mem::size_of::<OCTree>())
+//             .map(|chunk| {
+//                 OCTree::read_from(chunk.try_into().expect("should be a u32"))
+//                     .expect("error check here")
+//             })
+//             .collect::<Vec<OCTree>>();
+//         sender
+//             .send(data)
+//             .expect("Failed to send data to main world");
+//     }
 
-    // We need to make sure all `BufferView`'s are dropped before we do what we're about
-    // to do.
-    // Unmap so that we can copy to the staging buffer in the next iteration.
-    buffers.octree_cpu.unmap();
-}
+//     // We need to make sure all `BufferView`'s are dropped before we do what we're about
+//     // to do.
+//     // Unmap so that we can copy to the staging buffer in the next iteration.
+//     buffers.octree_cpu.unmap();
+// }
 
 /// Label to identify the node in the render graph
 #[derive(Debug, Hash, PartialEq, Eq, Clone, RenderLabel)]

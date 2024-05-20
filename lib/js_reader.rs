@@ -61,7 +61,7 @@ impl Plugin for CustomAssetReaderPlugin {
             AssetSource::build().with_reader(|| {
                 Box::new(CustomAssetReader(
                     // This is the default reader for the current platform
-                    Box::new(JsWasmAssetReader::new("assets".to_string())),
+                    Box::new(JsWasmAssetReader::new()),
                 ))
             }),
         )
@@ -100,16 +100,12 @@ pub fn update_assets(
 }
 
 /// Reader implementation for loading assets via HTTP in WASM.
-pub struct JsWasmAssetReader {
-    root_path: PathBuf,
-}
+pub struct JsWasmAssetReader;
 
 impl JsWasmAssetReader {
     /// Creates a new `WasmAssetReader`. The path provided will be used to build URLs to query for assets.
-    pub fn new<P: AsRef<Path>>(path: P) -> Self {
-        Self {
-            root_path: path.as_ref().to_owned(),
-        }
+    pub fn new() -> Self {
+        Self {}
     }
 }
 

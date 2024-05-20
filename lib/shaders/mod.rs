@@ -46,11 +46,11 @@ pub struct OCTree {
     mask: u32,
 }
 
-#[derive(Resource, AsBindGroup)]
-pub struct OCTreeData {
-    // voxels: BufferVec<Voxel>,
-    octree: BufferVec<OCTree>,
-}
+// #[derive(Resource, AsBindGroup)]
+// pub struct OCTreeData {
+//     // voxels: BufferVec<Voxel>,
+//     octree: BufferVec<OCTree>,
+// }
 //
 // impl Default for OCTreeData {
 //     fn default() -> Self {
