@@ -1,3 +1,5 @@
+use std::cmp::{max, min};
+
 use bevy::{
     prelude::*,
     render::{
@@ -9,11 +11,13 @@ use bevy::{
             BindGroup, BindGroupLayout, *,
         },
         renderer::{RenderContext, RenderDevice},
+        view::calculate_bounds,
         Render, RenderApp, RenderSet,
     },
 };
 use bytemuck::Zeroable;
 use crossbeam_channel::{Receiver, Sender};
+use js_sys::Math::pow;
 
 use crate::shaders::OCTree;
 
@@ -21,11 +25,6 @@ use super::Voxel;
 
 // TODO re-look at this
 const MAX_OCTREE: usize = 1;
-const OCTREE_DEPTH: usize = 1;
-const OCTREE_SUB_COUNT: usize = OCTREE_DEPTH * 8;
-const VOXEL_SINGLE_MAX_SIZE: usize = OCTREE_COUNT * 8;
-const OCTREE_COUNT: usize = OCTREE_SUB_COUNT * MAX_OCTREE; // one octree for now
-const VOXEL_COUNT: usize = VOXEL_SINGLE_MAX_SIZE * MAX_OCTREE; // one octree for now
 
 pub struct OCTreeComputePlugin;
 
@@ -82,10 +81,13 @@ pub struct ComputeBuffers {
 
 impl FromWorld for ComputeBuffers {
     fn from_world(world: &mut World) -> Self {
+        let max_octree = calculate_full_depth(MAX_OCTREE as u32) as usize;
+        let max_voxel = calculate_max_voxel(MAX_OCTREE as u32) as usize;
+
         let render_device = world.resource::<RenderDevice>();
 
         let mut init_data = encase::StorageBuffer::new(Vec::new());
-        let data = vec![OCTree::zeroed(); OCTREE_COUNT];
+        let data = vec![OCTree::zeroed(); max_octree];
         init_data.write(&data).expect("failed to write buffer");
 
         // The buffer that will be accessed by the gpu
@@ -103,7 +105,7 @@ impl FromWorld for ComputeBuffers {
         // copy the buffer modified by the GPU into a mappable, CPU-accessible buffer
         let octree_cpu_buffer = render_device.create_buffer(&BufferDescriptor {
             label: Some("octree_readback_buffer"),
-            size: (OCTREE_COUNT * std::mem::size_of::<OCTree>()) as u64,
+            size: (max_octree * std::mem::size_of::<OCTree>()) as u64,
             usage: BufferUsages::MAP_READ | BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
@@ -111,7 +113,7 @@ impl FromWorld for ComputeBuffers {
         let render_device = world.resource::<RenderDevice>();
 
         let mut init_data = encase::StorageBuffer::new(Vec::new());
-        let data = vec![Voxel::zeroed(); VOXEL_COUNT];
+        let data = vec![Voxel::zeroed(); max_voxel];
         init_data.write(&data).expect("failed to write buffer");
 
         // The buffer that will be accessed by the gpu
@@ -130,7 +132,7 @@ impl FromWorld for ComputeBuffers {
         // copy the buffer modified by the GPU into a mappable, CPU-accessible buffer
         let voxel_cpu_buffer = render_device.create_buffer(&BufferDescriptor {
             label: Some("voxel_readback_buffer"),
-            size: (VOXEL_COUNT * std::mem::size_of::<Voxel>()) as u64,
+            size: (max_voxel * std::mem::size_of::<Voxel>()) as u64,
             usage: BufferUsages::MAP_READ | BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
@@ -170,7 +172,8 @@ fn prepare_bind_group(
 #[derive(Resource)]
 struct ComputePipeline {
     layout: BindGroupLayout,
-    pipeline: CachedComputePipelineId,
+    pipeline_init: CachedComputePipelineId,
+    pipeline_finalize: CachedComputePipelineId,
 }
 
 impl FromWorld for ComputePipeline {
@@ -189,15 +192,29 @@ impl FromWorld for ComputePipeline {
         );
         let shader = world.load_asset("shaders/compute.wgsl"); // TODO rename
         let pipeline_cache = world.resource::<PipelineCache>();
-        let pipeline = pipeline_cache.queue_compute_pipeline(ComputePipelineDescriptor {
+        let pipeline_init = pipeline_cache.queue_compute_pipeline(ComputePipelineDescriptor {
+            label: None,
+            layout: vec![layout.clone()],
+            push_constant_ranges: Vec::new(),
+            shader: shader.clone(),
+            shader_defs: vec![],
+            entry_point: "init".into(),
+        });
+
+        let pipeline_finalize = pipeline_cache.queue_compute_pipeline(ComputePipelineDescriptor {
             label: None,
             layout: vec![layout.clone()],
             push_constant_ranges: Vec::new(),
             shader,
             shader_defs: vec![],
-            entry_point: "main".into(),
+            entry_point: "finalize".into(),
         });
-        ComputePipeline { layout, pipeline }
+
+        ComputePipeline {
+            layout,
+            pipeline_init,
+            pipeline_finalize,
+        }
     }
 }
 
@@ -296,18 +313,49 @@ impl Node for ComputeNode {
 
         // let buffers = world.resource::<ComputeBuffers>();
 
-        if let Some(init_pipeline) = pipeline_cache.get_compute_pipeline(pipeline.pipeline) {
-            let mut pass =
-                render_context
-                    .command_encoder()
-                    .begin_compute_pass(&ComputePassDescriptor {
-                        label: Some("GPU readback compute pass"),
-                        ..default()
-                    });
+        // should get 1 for first iteration
 
-            pass.set_bind_group(0, &bind_group, &[]);
-            pass.set_pipeline(init_pipeline);
-            pass.dispatch_workgroups(1, 8, 1);
+        {
+            let size = calculate_current_size(MAX_OCTREE as u32); // first pass, populate data.
+
+            if let Some(init_pipeline) = pipeline_cache.get_compute_pipeline(pipeline.pipeline_init)
+            {
+                let mut pass =
+                    render_context
+                        .command_encoder()
+                        .begin_compute_pass(&ComputePassDescriptor {
+                            label: Some("GPU readback compute pass"),
+                            ..default()
+                        });
+
+                pass.set_bind_group(0, &bind_group, &[]);
+                pass.set_pipeline(init_pipeline);
+                pass.dispatch_workgroups(size, size, size);
+            }
+        }
+
+        for i in (0..MAX_OCTREE).rev() {
+            info!("In finalize.");
+            // second pass, per dimension populate parent octrees
+            let size = calculate_current_size(i as u32);
+
+            if let Some(init_pipeline) =
+                pipeline_cache.get_compute_pipeline(pipeline.pipeline_finalize)
+            {
+                info!("In finalize 2.");
+
+                let mut pass =
+                    render_context
+                        .command_encoder()
+                        .begin_compute_pass(&ComputePassDescriptor {
+                            label: Some("GPU readback compute pass"),
+                            ..default()
+                        });
+
+                pass.set_bind_group(0, &bind_group, &[]);
+                pass.set_pipeline(init_pipeline);
+                pass.dispatch_workgroups(size, size, size);
+            }
         }
 
         // use this if we want to communicate with the cpu
@@ -322,4 +370,25 @@ impl Node for ComputeNode {
 
         Ok(())
     }
+}
+
+// depth 1 -> 1
+// depth 2 -> 8
+// depth 3 -> 8*8 -> 64
+// depth 4 -> 8*8*8 -> 512
+
+pub fn calculate_full_depth(depth: u32) -> u32 {
+    ((pow(8., (depth + 1) as f64) - 1.) / 7.) as u32
+}
+
+pub fn calculate_max_voxel(depth: u32) -> u32 {
+    pow(8., depth as f64 + 1.) as u32
+}
+
+pub fn calculate_current_size(depth: u32) -> u32 {
+    if depth == 0 {
+        return 1; // first octree is 1.
+    }
+
+    pow(2., depth as f64) as u32
 }

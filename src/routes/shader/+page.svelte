@@ -32,16 +32,44 @@ fn map(pos: vec3<f32>) -> f32 {
     return sphere(pos, 0.25);
 }
 
-@compute @workgroup_size(8)
-fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
+// fn calc_pos_from_invoc_id(global_id: vec3<u32>) -> vec3<f32> {
+
+
+// }
+
+// 8 total octrees and workers, this is the final level where we should calculate the voxels.
+// steps this compute shader needs to take is as follows:
+// 1. check if there is anything within bounds
+// 2. update parent octree with result of within bounds
+// 3. calculate all the voxels within its bounds (8 total)
+@compute @workgroup_size(2, 2, 2)
+fn init(@builtin(global_invocation_id) global_id: vec3<u32>) {
 
     if (octrees[0].offset == 0u) {
-        octrees[0].offset += 1u;
-        octrees[0].mask += 2u;
+        octrees[0].offset = 1u;
+        octrees[0].mask = 2u;
 
-        voxels[0].col += 1u;
+        voxels[0].col = 1u;
+
+        return;
     }
-}`;
+
+    octrees[0].offset += 1u;
+    octrees[0].mask += 1u;
+    voxels[0].col += 1u;
+}
+
+@compute @workgroup_size(1, 1, 1)
+fn finalize(@builtin(global_invocation_id) global_id: vec3<u32>) {
+
+    if (octrees[0].offset == 1u) {
+        octrees[1].offset = 1u;
+        octrees[1].mask = 2u;
+
+        voxels[1].col = 1u;
+    }
+}
+`;
 
     let value = `#import bevy_core_pipeline::fullscreen_vertex_shader::FullscreenVertexOutput
 #import bevy_render::globals::Globals
@@ -86,7 +114,7 @@ fn fragment(in: FullscreenVertexOutput) -> Output {
 
     col = vec4(sin(globals.time), cos(globals.time), 0.0, 1.0);
 
-    if (octrees[0].offset == 1 && voxels[0].col == 1) {
+    if (octrees[1].offset == 1 && voxels[1].col == 1) {
         col = vec4(0., 1., 1., 1.);
     }
 
