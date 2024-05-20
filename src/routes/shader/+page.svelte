@@ -6,9 +6,7 @@
     import { oneDark } from "@codemirror/theme-one-dark";
     import { wgsl } from "@iizukak/codemirror-lang-wgsl";
 
-    let compute_value = `
-
-#import bevy_render::globals::Globals
+    let compute_value = `#import bevy_render::globals::Globals
 
 struct OCTree {
     @location(0) offset: u32,
@@ -37,19 +35,15 @@ fn map(pos: vec3<f32>) -> f32 {
 @compute @workgroup_size(8)
 fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
 
-
     if (octrees[0].offset == 0u) {
         octrees[0].offset += 1u;
         octrees[0].mask += 2u;
 
         voxels[0].col += 1u;
     }
+}`;
 
-}
-`;
-
-    let value = `// This shader computes the chromatic aberration effect
-#import bevy_core_pipeline::fullscreen_vertex_shader::FullscreenVertexOutput
+    let value = `#import bevy_core_pipeline::fullscreen_vertex_shader::FullscreenVertexOutput
 #import bevy_render::globals::Globals
 
 struct OCTree {
@@ -100,8 +94,7 @@ fn fragment(in: FullscreenVertexOutput) -> Output {
     out.history = vec4(col);
     out.view_target = vec4(col);
     return out;
-}
-`;
+}`;
 
     push_shader("shaders/compute.wgsl", compute_value);
     push_shader("shaders/fragment.wgsl", value);
