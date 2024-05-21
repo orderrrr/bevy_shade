@@ -165,13 +165,16 @@ impl ViewNode for FragmentNode {
         let pipeline_cache = world.resource::<PipelineCache>();
 
         // Get the pipeline from the cache
-        let Some(pipeline) = pipeline_cache.get_render_pipeline(fragment_pipeline_id.0) else {
+        let (Some(pipeline), Some(compute_buffers)) = (
+            pipeline_cache.get_render_pipeline(fragment_pipeline_id.0),
+            world.get_resource::<ComputeBuffers>(),
+        ) else {
             return Ok(());
         };
 
         let globals_buffer = world.resource::<GlobalsBuffer>();
-        let octree_cpu = &world.resource::<ComputeBuffers>().octree_gpu;
-        let voxel_cpu = &world.resource::<ComputeBuffers>().voxel_gpu;
+        let octree_cpu = &compute_buffers.octree_gpu;
+        let voxel_cpu = &compute_buffers.voxel_gpu;
 
         // This will start a new "post process write", obtaining two texture
         // views from the view target - a `source` and a `destination`.

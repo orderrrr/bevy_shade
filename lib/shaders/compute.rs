@@ -1,6 +1,7 @@
 use bevy::{
     prelude::*,
     render::{
+        extract_component::{ComponentUniforms, ExtractComponentPlugin, UniformComponentPlugin},
         globals::{GlobalsBuffer, GlobalsUniform},
         graph::CameraDriverLabel,
         render_graph::*,
@@ -20,15 +21,19 @@ use crate::shaders::OCTree;
 
 use super::{OCTreeSettings, Voxel};
 
-// TODO re-look at this
-const MAX_OCTREE: usize = 1;
-
 pub struct OCTreeComputePlugin;
 
 impl Plugin for OCTreeComputePlugin {
     fn build(&self, app: &mut App) {
         let (s, r) = crossbeam_channel::unbounded();
-        app.insert_resource(MainWorldReceiver(r));
+        app.add_plugins((
+            ExtractComponentPlugin::<OCTreeSettings>::default(),
+            // The settings will also be the data used in the shader.
+            // This plugin will prepare the component for the GPU by creating a uniform buffer
+            // and writing the data to that buffer every frame.
+            UniformComponentPlugin::<OCTreeSettings>::default(),
+        ))
+        .insert_resource(MainWorldReceiver(r));
 
         let render_app = app.sub_app_mut(RenderApp);
         render_app
@@ -36,10 +41,20 @@ impl Plugin for OCTreeComputePlugin {
             .add_systems(
                 Render,
                 (
+                    // TODO - do this whenever octree changes.
+                    prepare_buffers
+                        .in_set(RenderSet::PrepareBindGroups)
+                        .run_if(not(resource_exists::<ComputeBuffers>)),
+                    // TODO - do this whenever octree changes.
+                    prepare_pipeline
+                        .in_set(RenderSet::PrepareBindGroups)
+                        .run_if(not(resource_exists::<ComputePipeline>)),
                     prepare_bind_group
                         .in_set(RenderSet::PrepareBindGroups)
                         // We don't need to recreate the bind group every frame
-                        .run_if(not(resource_exists::<ComputeBindGroup>)),
+                        .run_if(not(resource_exists::<ComputeBindGroup>))
+                        .run_if(resource_exists::<ComputePipeline>)
+                        .run_if(resource_exists::<ComputeBuffers>),
                     // use this if we want to communicate with the cpu
                     //
                     // We need to run it after the render graph is done
@@ -53,11 +68,11 @@ impl Plugin for OCTreeComputePlugin {
         render_graph.add_node_edge(ComputeNodeLabel, CameraDriverLabel);
     }
 
-    fn finish(&self, app: &mut App) {
-        let render_app = app.sub_app_mut(RenderApp);
-        render_app.init_resource::<ComputePipeline>();
-        render_app.init_resource::<ComputeBuffers>();
-    }
+    // fn finish(&self, app: &mut App) {
+    //     // let render_app = app.sub_app_mut(RenderApp);
+    //     // render_app.init_resource::<ComputePipeline>();
+    //     // render_app.init_resource::<ComputeBuffers>();
+    // }
 }
 
 #[derive(Resource, Deref)]
@@ -78,8 +93,12 @@ pub struct ComputeBuffers {
 
 impl FromWorld for ComputeBuffers {
     fn from_world(world: &mut World) -> Self {
-        let max_octree = calculate_full_depth(MAX_OCTREE as u32) as usize;
-        let max_voxel = calculate_max_voxel(MAX_OCTREE as u32) as usize;
+        info!("THIS WAS RUN");
+        let settings = world.query::<&OCTreeSettings>().single(world);
+        let depth = settings.depth;
+
+        let max_octree = calculate_full_depth(depth) as usize;
+        let max_voxel = calculate_max_voxel(depth) as usize;
 
         let render_device = world.resource::<RenderDevice>();
 
@@ -153,13 +172,16 @@ fn prepare_bind_group(
     render_device: Res<RenderDevice>,
     buffers: Res<ComputeBuffers>,
     globals: Res<GlobalsBuffer>,
-    octree_settings: Res<OCTreeSettings>, // TODO
+    settings: Res<ComponentUniforms<OCTreeSettings>>,
 ) {
+    // let buffers = construct_compute_buffer(setting_query, &render_device);
+
     let bind_group = render_device.create_bind_group(
         None,
         &pipeline.layout,
         &BindGroupEntries::sequential((
             &globals.buffer,
+            settings.uniforms().binding().unwrap(),
             buffers.octree_gpu.as_entire_binding(),
             buffers.voxel_gpu.as_entire_binding(),
         )),
@@ -167,15 +189,132 @@ fn prepare_bind_group(
     commands.insert_resource(ComputeBindGroup(bind_group));
 }
 
+fn prepare_buffers(
+    mut commands: Commands,
+    setting_query: Query<&OCTreeSettings>,
+    render_device: Res<RenderDevice>,
+) {
+    info!("buffers prepared");
+
+    let settings = setting_query.single();
+    let depth = settings.depth;
+
+    let max_octree = calculate_full_depth(depth) as usize;
+    let max_voxel = calculate_max_voxel(depth) as usize;
+
+    let mut init_data = encase::StorageBuffer::new(Vec::new());
+    let data = vec![OCTree::zeroed(); max_octree];
+    init_data.write(&data).expect("failed to write buffer");
+
+    // The buffer that will be accessed by the gpu
+    let octree_gpu_buffer = render_device.create_buffer_with_data(&BufferInitDescriptor {
+        label: Some("octree_gpu_buffer"),
+        contents: init_data.as_ref(),
+        // usage: BufferUsages::STORAGE | BufferUsages::COPY_SRC, // use this if we want to communicate with the cpu
+        usage: BufferUsages::STORAGE,
+    });
+    // For portability reasons, WebGPU draws a distinction between memory that is
+    // accessible by the CPU and memory that is accessible by the GPU. Only
+    // buffers accessible by the CPU can be mapped and accessed by the CPU and
+    // only buffers visible to the GPU can be used in shaders. In order to get
+    // data from the GPU, we need to use `CommandEncoder::copy_buffer_to_buffer` to
+    // copy the buffer modified by the GPU into a mappable, CPU-accessible buffer
+    let octree_cpu_buffer = render_device.create_buffer(&BufferDescriptor {
+        label: Some("octree_readback_buffer"),
+        size: (max_octree * std::mem::size_of::<OCTree>()) as u64,
+        usage: BufferUsages::MAP_READ | BufferUsages::COPY_DST,
+        mapped_at_creation: false,
+    });
+
+    let mut init_data = encase::StorageBuffer::new(Vec::new());
+    let data = vec![Voxel::zeroed(); max_voxel];
+    init_data.write(&data).expect("failed to write buffer");
+
+    // The buffer that will be accessed by the gpu
+    let voxel_gpu_buffer = render_device.create_buffer_with_data(&BufferInitDescriptor {
+        label: Some("voxel_gpu_buffer"),
+        contents: init_data.as_ref(),
+        // usage: BufferUsages::STORAGE | BufferUsages::COPY_SRC, // use this if we want to communicate with the cpu
+        usage: BufferUsages::STORAGE,
+    });
+
+    // For portability reasons, WebGPU draws a distinction between memory that is
+    // accessible by the CPU and memory that is accessible by the GPU. Only
+    // buffers accessible by the CPU can be mapped and accessed by the CPU and
+    // only buffers visible to the GPU can be used in shaders. In order to get
+    // data from the GPU, we need to use `CommandEncoder::copy_buffer_to_buffer` to
+    // copy the buffer modified by the GPU into a mappable, CPU-accessible buffer
+    let voxel_cpu_buffer = render_device.create_buffer(&BufferDescriptor {
+        label: Some("voxel_readback_buffer"),
+        size: (max_voxel * std::mem::size_of::<Voxel>()) as u64,
+        usage: BufferUsages::MAP_READ | BufferUsages::COPY_DST,
+        mapped_at_creation: false,
+    });
+
+    commands.insert_resource(ComputeBuffers {
+        octree_gpu: octree_gpu_buffer,
+        octree_cpu: octree_cpu_buffer,
+
+        voxel_gpu: voxel_gpu_buffer,
+        voxel_cpu: voxel_cpu_buffer,
+    });
+}
+
+fn prepare_pipeline(world: &mut World) {
+    let settings = world.query::<&OCTreeSettings>().single(world).clone();
+
+    let layout = world.resource::<RenderDevice>().create_bind_group_layout(
+        "ComputeOCTree",
+        &BindGroupLayoutEntries::sequential(
+            ShaderStages::COMPUTE,
+            (
+                uniform_buffer::<GlobalsUniform>(false),
+                uniform_buffer::<OCTreeSettings>(false),
+                storage_buffer::<Vec<OCTree>>(false),
+                storage_buffer::<Vec<Voxel>>(false),
+            ),
+        ),
+    );
+    let shader = world.load_asset("shaders/compute.wgsl"); // TODO rename
+    let pipeline_cache = world.resource::<PipelineCache>();
+    let pipeline_init = pipeline_cache.queue_compute_pipeline(ComputePipelineDescriptor {
+        label: None,
+        layout: vec![layout.clone()],
+        push_constant_ranges: Vec::new(),
+        shader: shader.clone(),
+        shader_defs: vec![],
+        entry_point: "init".into(),
+    });
+
+    let pipeline_finalize = pipeline_cache.queue_compute_pipeline(ComputePipelineDescriptor {
+        label: None,
+        layout: vec![layout.clone()],
+        push_constant_ranges: Vec::new(),
+        shader,
+        shader_defs: vec![],
+        entry_point: "finalize".into(),
+    });
+
+    world.insert_resource(ComputePipeline {
+        layout,
+        pipeline_init,
+        pipeline_finalize,
+        settings,
+    });
+}
+
 #[derive(Resource)]
 struct ComputePipeline {
     layout: BindGroupLayout,
     pipeline_init: CachedComputePipelineId,
     pipeline_finalize: CachedComputePipelineId,
+    settings: OCTreeSettings,
 }
 
 impl FromWorld for ComputePipeline {
     fn from_world(world: &mut World) -> Self {
+        let settings = world.query::<&OCTreeSettings>().single(world).clone();
+
         let render_device = world.resource::<RenderDevice>();
         let layout = render_device.create_bind_group_layout(
             "ComputeOCTree",
@@ -183,6 +322,7 @@ impl FromWorld for ComputePipeline {
                 ShaderStages::COMPUTE,
                 (
                     uniform_buffer::<GlobalsUniform>(false),
+                    uniform_buffer::<OCTreeSettings>(false),
                     storage_buffer::<Vec<OCTree>>(false),
                     storage_buffer::<Vec<Voxel>>(false),
                 ),
@@ -212,6 +352,7 @@ impl FromWorld for ComputePipeline {
             layout,
             pipeline_init,
             pipeline_finalize,
+            settings,
         }
     }
 }
@@ -305,16 +446,20 @@ impl Node for ComputeNode {
         render_context: &mut RenderContext,
         world: &World,
     ) -> Result<(), NodeRunError> {
-        let bind_group = &world.resource::<ComputeBindGroup>().0;
-        let pipeline = world.resource::<ComputePipeline>();
+        let (Some(bind_group), Some(pipeline)) = (
+            &world.get_resource::<ComputeBindGroup>(),
+            world.get_resource::<ComputePipeline>(),
+        ) else {
+            return Ok(());
+        };
+
         let pipeline_cache = world.resource::<PipelineCache>();
 
         // let buffers = world.resource::<ComputeBuffers>();
-
         // should get 1 for first iteration
 
         {
-            let size = calculate_current_size(MAX_OCTREE as u32); // first pass, populate data.
+            let size = calculate_current_size(pipeline.settings.depth); // first pass, populate data.
 
             if let Some(init_pipeline) = pipeline_cache.get_compute_pipeline(pipeline.pipeline_init)
             {
@@ -326,22 +471,21 @@ impl Node for ComputeNode {
                             ..default()
                         });
 
-                pass.set_bind_group(0, &bind_group, &[]);
+                pass.set_bind_group(0, &bind_group.0, &[]);
                 pass.set_pipeline(init_pipeline);
                 pass.dispatch_workgroups(size, size, size);
             }
         }
 
-        for i in (0..MAX_OCTREE).rev() {
-            info!("In finalize.");
+        for i in (0..pipeline.settings.depth).rev() {
+            // info!("Got into pass2");
             // second pass, per dimension populate parent octrees
-            let size = calculate_current_size(i as u32);
+            let size = calculate_current_size(i);
 
             if let Some(init_pipeline) =
                 pipeline_cache.get_compute_pipeline(pipeline.pipeline_finalize)
             {
-                info!("In finalize 2.");
-
+                // info!("running pass2");
                 let mut pass =
                     render_context
                         .command_encoder()
@@ -350,7 +494,7 @@ impl Node for ComputeNode {
                             ..default()
                         });
 
-                pass.set_bind_group(0, &bind_group, &[]);
+                pass.set_bind_group(0, &bind_group.0, &[]);
                 pass.set_pipeline(init_pipeline);
                 pass.dispatch_workgroups(size, size, size);
             }

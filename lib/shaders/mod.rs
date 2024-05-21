@@ -1,6 +1,8 @@
 use bevy::{
     ecs::prelude::*,
-    render::{extract_resource::ExtractResource, render_resource::*},
+    render::{
+        extract_component::ExtractComponent, extract_resource::ExtractResource, render_resource::*,
+    },
 };
 use bytemuck::{Pod, Zeroable};
 use zerocopy::{FromBytes, FromZeroes};
@@ -47,22 +49,10 @@ pub struct OCTree {
 }
 
 #[repr(C)]
-#[derive(
-    Copy,
-    Debug,
-    Default,
-    Clone,
-    ShaderType,
-    ExtractResource,
-    Resource,
-    Pod,
-    Zeroable,
-    FromBytes,
-    FromZeroes,
-)]
-struct OCTreeSettings {
-    depth: u32,
-    scale: f32,
+#[derive(Component, Default, Clone, Copy, ExtractComponent, ShaderType)]
+pub struct OCTreeSettings {
+    pub depth: u32,
+    pub scale: f32,
 }
 
 // #[derive(Resource, AsBindGroup)]

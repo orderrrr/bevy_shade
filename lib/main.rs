@@ -2,17 +2,18 @@ use bevy::{asset::AssetMetaCheck, prelude::*};
 use shaders::{
     compute::OCTreeComputePlugin,
     fragment::{FragmentPlugin, FragmentSettings},
+    OCTreeSettings,
 };
 
 mod js_reader;
 mod shaders;
 
-use js_reader::CustomAssetReaderPlugin;
+// use js_reader::CustomAssetReaderPlugin;
 
 fn main() {
     App::new()
         .add_plugins((
-            CustomAssetReaderPlugin,
+            // CustomAssetReaderPlugin, // use default assets
             DefaultPlugins
                 .set(WindowPlugin {
                     primary_window: Some(Window {
@@ -47,6 +48,11 @@ fn setup(mut commands: Commands) {
         },
         FragmentSettings { reset: false },
     ));
+
+    commands.spawn(OCTreeSettings {
+        depth: 1,
+        scale: 1.0,
+    });
 }
 
 // TODO - remove this
