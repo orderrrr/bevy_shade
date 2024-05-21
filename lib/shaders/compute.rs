@@ -15,7 +15,6 @@ use bevy::{
 };
 use bytemuck::Zeroable;
 use crossbeam_channel::{Receiver, Sender};
-use js_sys::Math::pow;
 
 use crate::shaders::OCTree;
 
@@ -520,11 +519,11 @@ impl Node for ComputeNode {
 // depth 4 -> 8*8*8 -> 512
 
 pub fn calculate_full_depth(depth: u32) -> u32 {
-    ((pow(8., (depth + 1) as f64) - 1.) / 7.) as u32
+    ((8_f64.powf((depth + 1) as f64) - 1.) / 7.) as u32
 }
 
 pub fn calculate_max_voxel(depth: u32) -> u32 {
-    pow(8., depth as f64 + 1.) as u32
+    8_f64.powf(depth as f64 + 1.) as u32
 }
 
 pub fn calculate_current_size(depth: u32) -> u32 {
@@ -532,5 +531,5 @@ pub fn calculate_current_size(depth: u32) -> u32 {
         return 1; // first octree is 1.
     }
 
-    pow(2., depth as f64) as u32
+    2_f64.powf(depth as f64) as u32
 }

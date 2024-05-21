@@ -39,11 +39,19 @@ fn fragment(in: FullscreenVertexOutput) -> Output {
         1.0
     );
 
-    col = vec4(sin(globals.time), cos(globals.time), 0.0, 1.0);
+    col = vec4(1.0);
 
-    if (octrees[0].offset == 1) {
+    if (octrees[8].mask > 0) {
         col = vec4(0., 1., 1., 1.);
     }
+
+    var mask = 0u;
+
+    mask = insertBits(mask, 1u, 0u, 1u);
+
+    // if (mask >= 1u) {
+    //     col = vec4(0., 1., 1., 1.);
+    // }
 
     var out: Output;
     out.history = vec4(col);
