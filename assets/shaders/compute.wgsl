@@ -123,7 +123,7 @@ fn init_with_dims(global_id: vec3<u32>, num_workgroups: vec3<u32>) {
         // find the correct index.
         let index = get_unique_index_for_dim(global_id, num_workgroups.x);
 
-        var mask = 0u;
+        octrees[index].mask = 0u;
 
         // this is in init so we need to calc all voxels.
         for (var i: u32 = 0; i < 2; i++) {
@@ -143,13 +143,11 @@ fn init_with_dims(global_id: vec3<u32>, num_workgroups: vec3<u32>) {
                         voxels[index + vidx].col = 1u;
                         voxels[index + vidx].mat = 1u;
 
-                        mask = insertBits(mask, 1u, vidx, 1u);
+                        octrees[index].mask = insertBits(octrees[index].mask, 1u, vidx, 1u);
                     }
                 }
             }
         }
-
-        octrees[index].mask = mask;
     }
 }
 
@@ -165,7 +163,7 @@ fn finalize_with_dims(global_id: vec3<u32>, num_workgroups: vec3<u32>) {
     if (d <= b) {
     // if (true) {
 
-        var mask = 0u;
+        octrees[index].mask = 0u;
 
         for (var i: u32 = 0; i < 2; i++) {
             for (var j: u32 = 0; j < 2; j++) {
@@ -177,12 +175,10 @@ fn finalize_with_dims(global_id: vec3<u32>, num_workgroups: vec3<u32>) {
                     if octrees[ci].mask > 1 {
                         let vidx = get_unique_index_for_dim(vid, u32(2));
 
-                        mask = insertBits(mask, 1u, vidx, 1u);
+                        octrees[index].mask = insertBits(octrees[index].mask, 1u, vidx, 1u);
                     }
                 }
             }
         }
-
-        octrees[index].mask = mask;
     }
 }
