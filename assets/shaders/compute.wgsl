@@ -48,19 +48,7 @@ fn map(pos: vec3<f32>) -> f32 {
 }
 
 fn calc_pos_from_invoc_id(block_indices: vec3<u32>, depth: u32) -> vec3<f32> {
-    // Calculate the size of a block at the given depth level in the octree
-    // Divide the overall scale (settings.scale) by 2 raised to the power of depth
-    let block_size = settings.scale / pow(2.0, f32(depth));
-
-    // Calculate the offset from the corner of a block to its center
-    // Divide the block size by 2 to get half of the block size
-    let center_offset = block_size / 2.0;
-
-    // Calculate and return the position of the block based on the block indices and depth
-    // Multiply the converted block_indices by block_size to scale the indices based on the block size at the given depth
-    // Subtract settings.scale / 2.0 from the scaled indices to offset the position towards the origin of the octree
-    // Add the center_offset to the result to get the final position of the block's center
-    return vec3<f32>(block_indices) * block_size - (settings.scale / 2.0) + center_offset;
+    return (vec3<f32>(block_indices) + vec3<f32>(0.5, 0.5, 0.5)) * settings.scale / pow(2., f32(depth));
 }
 
 fn calc_vpos_from_vid_and_parent(parent_depth: u32, parent_indices: vec3<u32>, child_offset: vec3<u32>) -> vec3<f32> {
@@ -134,7 +122,7 @@ fn init_with_dims(global_id: vec3<u32>, num_workgroups: vec3<u32>) {
 
                     let d2 = map(pos);
 
-                    if (d2 <= 0.) {
+                    if (d2 <= 0.001) {
 
                         let vidx = get_unique_index_for_dim(vid, u32(2));
 
