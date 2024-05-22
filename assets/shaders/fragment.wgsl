@@ -11,15 +11,21 @@ struct Voxel {
     @location(1) mat: u32,
 }
 
+struct OCTreeSettings {
+    depth: u32,
+    scale: f32,
+}
+
 @group(0) @binding(0) var<uniform> globals: Globals;
 @group(0) @binding(1) var<storage, read> octrees: array<OCTree>;
 @group(0) @binding(2) var<storage, read> voxels: array<Voxel>;
+@group(0) @binding(3) var<uniform> settings: OCTreeSettings;
 
-@group(0) @binding(3) var screen_texture: texture_2d<f32>;
-@group(0) @binding(4) var prev_frame: texture_2d<f32>;
+@group(0) @binding(4) var screen_texture: texture_2d<f32>;
+@group(0) @binding(5) var prev_frame: texture_2d<f32>;
 
-@group(0) @binding(5) var nearest_sampler: sampler;
-@group(0) @binding(6) var linear_sampler: sampler;
+@group(0) @binding(6) var nearest_sampler: sampler;
+@group(0) @binding(7) var linear_sampler: sampler;
 
 struct Output {
   @location(0) view_target: vec4<f32>,
