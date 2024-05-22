@@ -34,18 +34,16 @@ struct Output {
 
 @fragment
 fn fragment(in: FullscreenVertexOutput) -> Output {
- // Chromatic aberration strength
+    // Chromatic aberration strength
     let offset_strength = 0.1;
 
- // Sample each color channel with an arbitrary shift
+    // Sample each color channel with an arbitrary shift
     var col = vec4<f32>(
         textureSample(screen_texture, nearest_sampler, in.uv + vec2<f32>(offset_strength, -offset_strength)).r,
         textureSample(screen_texture, nearest_sampler, in.uv + vec2<f32>(-offset_strength, 0.0)).g,
         textureSample(screen_texture, nearest_sampler, in.uv + vec2<f32>(0.0, offset_strength)).b,
         1.0
     );
-
-    col = vec4(1.0);
 
     if (octrees[8].mask > 0) {
         col = vec4(0., 1., 1., 1.);

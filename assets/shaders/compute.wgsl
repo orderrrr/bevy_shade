@@ -1,3 +1,4 @@
+// compute shader
 #import bevy_render::globals::Globals
 
 struct OCTreeSettings {
@@ -6,15 +7,14 @@ struct OCTreeSettings {
 }
 
 struct OCTree {
-    @location(0) offset: u32,
-    @location(1) mask: u32,
+    offset: u32,
+    mask: u32,
 }
 
 struct Voxel {
-    @location(0) col: u32,
-    @location(1) mat: u32,
+    col: u32,
+    mat: u32,
 }
-
 
 @group(0) @binding(0) var<uniform> globals: Globals;
 @group(0) @binding(1) var<uniform> settings: OCTreeSettings;
@@ -63,7 +63,7 @@ fn calc_pos_from_invoc_id(block_indices: vec3<u32>, depth: u32) -> vec3<f32> {
     return vec3<f32>(block_indices) * block_size - (settings.scale / 2.0) + center_offset;
 }
 
-fn calp_vpos_from_vid_and_parent(parent_depth: u32, parent_indices: vec3<u32>, child_offset: vec3<u32>) -> vec3<f32> {
+fn calc_vpos_from_vid_and_parent(parent_depth: u32, parent_indices: vec3<u32>, child_offset: vec3<u32>) -> vec3<f32> {
     // Calculate the size of the parent block at the given parent_depth level in the octree
     // Divide the overall scale (settings.scale) by 2 raised to the power of parent_depth
     let parent_block_size = settings.scale / pow(2.0, f32(parent_depth));
@@ -118,7 +118,6 @@ fn init_with_dims(global_id: vec3<u32>, num_workgroups: vec3<u32>) {
     let d = map(point);
 
     if (d <= b) {
-    // if (true) {
         // we hit an object.
         // find the correct index.
         let index = get_unique_index_for_dim(global_id, num_workgroups.x);
@@ -131,12 +130,11 @@ fn init_with_dims(global_id: vec3<u32>, num_workgroups: vec3<u32>) {
                 for(var k: u32 = 0; k < 2; k++) {
 
                     let vid = vec3<u32>(i, j, k);
-                    let pos = calp_vpos_from_vid_and_parent(num_workgroups.x - 1, global_id, vid);
+                    let pos = calc_vpos_from_vid_and_parent(num_workgroups.x - 1, global_id, vid);
 
                     let d2 = map(pos);
 
                     if (d2 <= 0.) {
-                    // if (true) {
 
                         let vidx = get_unique_index_for_dim(vid, u32(2));
 
@@ -155,13 +153,12 @@ fn finalize_with_dims(global_id: vec3<u32>, num_workgroups: vec3<u32>) {
 
     let index = count_octrees_below(num_workgroups.x - 1, settings.depth) + get_unique_index_for_dim(global_id, num_workgroups.x);
 
-    let b = 0.5;
+    let b = settings.scale;
 
     let point = calc_pos_from_invoc_id(global_id, num_workgroups.x - 1);
     let d = map(point);
 
     if (d <= b) {
-    // if (true) {
 
         octrees[index].mask = 0u;
 
