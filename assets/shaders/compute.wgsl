@@ -204,5 +204,12 @@ fn finalize_with_dims(global_id: vec3<u32>, num_workgroups: vec3<u32>) {
 
 
 fn bit_insert(in: u32, gpos: vec3<u32>, offset: vec3<u32>, dim: u32) -> u32 {
+    // would come in as 2, so 2*2 gives 4
+    let dim = u32(pow(2., f32(dim)));
+
+    // for instance dim of 4x4x4.
     
+
+
+    let x = insertBits(in, 1u, vidx, 1u)   
 }
