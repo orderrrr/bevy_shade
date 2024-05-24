@@ -68,10 +68,21 @@ fn get_unique_index_for_dim(g: vec3<u32>, i: u32) -> u32 {
     return g.x + g.y * dim + g.z * dim * dim;
 }
 
-fn get_child_index(parent_pos: vec3<u32>, child_local_pos: vec3<u32>, i: u32) -> u32 {
-    let child_pos = parent_pos * 2 + child_local_pos;
-    let child_depth_dim = 1u << u32(pow(2., f32(i))); // Calculate the dimensions of the grid at the child's depth
-    return get_unique_index_for_dim(child_pos, child_depth_dim);
+fn get_child_index(parent_pos: vec3<u32>, child_rel_pos: vec3<u32>, parent_depth: u32) -> u32 {
+    let parent_size = vec3<u32>(1u << parent_depth);
+    let child_grid_size = parent_size * 2u;
+
+    let parent_index = parent_pos.x * parent_size.y * parent_size.z +
+                       parent_pos.y * parent_size.z +
+                       parent_pos.z;
+
+    let child_offset = child_rel_pos.x * (1u << parent_depth) +
+                       child_rel_pos.y * (1u << (parent_depth + 1u)) +
+                       child_rel_pos.z * (1u << (parent_depth + 2u));
+
+    let child_index = parent_index * 8u + child_offset;
+
+    return child_index;
 }
 
 fn get_position_from_unique_index(index: u32, i: u32) -> vec3<u32> {
@@ -90,7 +101,7 @@ fn count_octrees_below(cd: u32, i: u32) -> u32 {
 fn init_with_dims(global_id: vec3<u32>, num_workgroups: vec3<u32>) {
 
     let gidx_test = vec3<u32>(0u, 0u, 0u);
-    let vidx_test = vec3<u32>(0u, 0u, 0u);
+    let vidx_test = vec3<u32>(1u, 1u, 1u);
 
     let b = settings.scale; // 1.0
 
@@ -123,16 +134,14 @@ fn init_with_dims(global_id: vec3<u32>, num_workgroups: vec3<u32>) {
                     let pos = calc_vpos_from_vid_and_parent(point, vid, i);
                     let d2 = map(pos);
 
-                    let offset = vec3<u32>(0) * 2;
-
-
-                    let vidx = get_unique_index_for_dim(offset + vid, 4u);
+                    let vidi = get_child_index(global_id, vid, i);
+                    let vidx = get_unique_index_for_dim(vid, 2u);
 
                     if global_id.x == gidx_test.x && global_id.y == gidx_test.y && global_id.z == gidx_test.z {
 
                         if vid.x == vidx_test.x && vid.y == vidx_test.y && vid.z == vidx_test.z {
-                            voxels[vidx].col = 1u;
-                            voxels[vidx].mat = 1u;
+                            voxels[vidi].col = 1u;
+                            voxels[vidi].mat = 1u;
                             octrees[index].mask = insertBits(octrees[index].mask, 1u, vidx, 1u);
                             break;
                         }
@@ -146,11 +155,11 @@ fn init_with_dims(global_id: vec3<u32>, num_workgroups: vec3<u32>) {
 
                     //     octrees[index].mask = insertBits(octrees[index].mask, 1u, vidx, 1u);
 
-                    //     continue;
+                    //     break;
                     // }
 
-                    voxels[vidx].col = 0u;
-                    voxels[vidx].mat = 0u;
+                    voxels[vidi].col = 0u;
+                    voxels[vidi].mat = 0u;
                 }
             }
         }
@@ -175,10 +184,10 @@ fn finalize_with_dims(global_id: vec3<u32>, num_workgroups: vec3<u32>) {
                 for (var k: u32 = 0; k < 2; k++) {
 
                     let vid = vec3<u32>(i, j, k);
-                    let ci = count_octrees_below(num_workgroups.x, settings.depth) + get_child_index(global_id, vid, num_workgroups.x);
+                    let ci = get_child_index(global_id, vid, num_workgroups.x);
 
                     if octrees[ci].mask > 1 {
-                        let vidx = get_unique_index_for_dim(vid, u32(2));
+                        let vidx = get_unique_index_for_dim(vid, 2u);
 
                         octrees[index].mask = insertBits(octrees[index].mask, 1u, vidx, 1u);
                     }
@@ -203,13 +212,13 @@ fn finalize_with_dims(global_id: vec3<u32>, num_workgroups: vec3<u32>) {
 
 
 
-fn bit_insert(in: u32, gpos: vec3<u32>, offset: vec3<u32>, dim: u32) -> u32 {
-    // would come in as 2, so 2*2 gives 4
-    let dim = u32(pow(2., f32(dim)));
-
-    // for instance dim of 4x4x4.
-    
-
-
-    let x = insertBits(in, 1u, vidx, 1u)   
-}
+// fn bit_insert(in: u32, gpos: vec3<u32>, offset: vec3<u32>, dim: u32) -> u32 {
+//     // would come in as 2, so 2*2 gives 4
+//     let dim = u32(pow(2., f32(dim)));
+// 
+//     // for instance dim of 4x4x4.
+//     
+// 
+// 
+//     let x = insertBits(in, 1u, vidx, 1u)   
+// }

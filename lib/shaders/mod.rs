@@ -9,6 +9,7 @@ use zerocopy::{FromBytes, FromZeroes};
 
 pub mod compute;
 pub mod fragment;
+pub mod lib;
 
 #[repr(C)]
 #[derive(

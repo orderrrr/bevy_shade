@@ -175,7 +175,7 @@ fn distance_to_octree(p: vec3<f32>, i: u32) -> f32 {
                                             // voxel
                                             let vip = calc_vpos_from_vid_and_parent(ip, vpos, i);
                                             let offset = (grid_pos * 2);
-                                            let voxid = get_unique_index_for_dim(offset + vpos, 4u);
+                                            let voxid = get_child_index(cpos, vpos, 1u);
 
 
                                             // |    0|    1|    2|    3|
@@ -328,10 +328,21 @@ fn get_unique_index_for_dim(g: vec3<u32>, i: u32) -> u32 {
     return g.x + g.y * dim + g.z * dim * dim;
 }
 
-fn get_child_index(parent_pos: vec3<u32>, child_local_pos: vec3<u32>, i: u32) -> u32 {
-    let child_pos = parent_pos * 2 + child_local_pos;
-    let child_depth_dim = 1u << u32(pow(2., f32(i))); // Calculate the dimensions of the grid at the child's depth
-    return get_unique_index_for_dim(child_pos, child_depth_dim);
+fn get_child_index(parent_pos: vec3<u32>, child_rel_pos: vec3<u32>, parent_depth: u32) -> u32 {
+    let parent_size = vec3<u32>(1u << parent_depth);
+    let child_grid_size = parent_size * 2u;
+
+    let parent_index = parent_pos.x * parent_size.y * parent_size.z +
+                       parent_pos.y * parent_size.z +
+                       parent_pos.z;
+
+    let child_offset = child_rel_pos.x * (1u << parent_depth) +
+                       child_rel_pos.y * (1u << (parent_depth + 1u)) +
+                       child_rel_pos.z * (1u << (parent_depth + 2u));
+
+    let child_index = parent_index * 8u + child_offset;
+
+    return child_index;
 }
 
 fn get_position_from_unique_index(index: u32, i: u32) -> vec3<u32> {
