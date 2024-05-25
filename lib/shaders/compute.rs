@@ -16,7 +16,7 @@ use bevy::{
 use bytemuck::Zeroable;
 use crossbeam_channel::{Receiver, Sender};
 
-use crate::shaders::OCTree;
+use crate::shaders::{OCTree, OCTreeRuntimeData};
 
 use super::{OCTreeSettings, Voxel};
 
@@ -88,6 +88,9 @@ pub struct ComputeBuffers {
 
     pub voxel_gpu: Buffer,
     pub voxel_cpu: Buffer,
+
+    pub runtime_gpu: Buffer,
+    pub runtime_cpu: Buffer, // todo , how do I make this lot a buffer and just a uniform object
 }
 
 impl FromWorld for ComputeBuffers {
@@ -125,8 +128,6 @@ impl FromWorld for ComputeBuffers {
             mapped_at_creation: false,
         });
 
-        let render_device = world.resource::<RenderDevice>();
-
         let mut init_data = encase::StorageBuffer::new(Vec::new());
         let data = vec![Voxel::zeroed(); max_voxel];
         init_data.write(&data).expect("failed to write buffer");
@@ -152,12 +153,33 @@ impl FromWorld for ComputeBuffers {
             mapped_at_creation: false,
         });
 
+        let mut init_data = encase::StorageBuffer::new(Vec::new());
+        let data = vec![OCTreeRuntimeData::new(depth); 1];
+        init_data.write(&data).expect("failed to write buffer");
+
+        let runtime_buffer = render_device.create_buffer_with_data(&BufferInitDescriptor {
+            label: Some("octree_runtime_gpu_buffer"),
+            contents: init_data.as_ref(),
+            // usage: BufferUsages::STORAGE | BufferUsages::COPY_SRC, // use this if we want to communicate with the cpu
+            usage: BufferUsages::STORAGE,
+        });
+
+        let runtime_cpu_buffer = render_device.create_buffer(&BufferDescriptor {
+            label: Some("octree_runtime_cpu_buffer"),
+            size: 1,
+            usage: BufferUsages::MAP_READ | BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+
         Self {
             octree_gpu: octree_gpu_buffer,
             octree_cpu: octree_cpu_buffer,
 
             voxel_gpu: voxel_gpu_buffer,
             voxel_cpu: voxel_cpu_buffer,
+
+            runtime_gpu: runtime_buffer,
+            runtime_cpu: runtime_cpu_buffer,
         }
     }
 }
@@ -183,6 +205,7 @@ fn prepare_bind_group(
             settings.uniforms().binding().unwrap(),
             buffers.octree_gpu.as_entire_binding(),
             buffers.voxel_gpu.as_entire_binding(),
+            buffers.runtime_gpu.as_entire_binding(),
         )),
     );
     commands.insert_resource(ComputeBindGroup(bind_group));
@@ -250,12 +273,33 @@ fn prepare_buffers(
         mapped_at_creation: false,
     });
 
+    let mut init_data = encase::StorageBuffer::new(Vec::new());
+    let data = vec![OCTreeRuntimeData::new(depth); 1];
+    init_data.write(&data).expect("failed to write buffer");
+
+    let runtime_buffer = render_device.create_buffer_with_data(&BufferInitDescriptor {
+        label: Some("octree_runtime_gpu_buffer"),
+        contents: init_data.as_ref(),
+        // usage: BufferUsages::STORAGE | BufferUsages::COPY_SRC, // use this if we want to communicate with the cpu
+        usage: BufferUsages::STORAGE,
+    });
+
+    let runtime_cpu_buffer = render_device.create_buffer(&BufferDescriptor {
+        label: Some("octree_runtime_cpu_buffer"),
+        size: 1,
+        usage: BufferUsages::MAP_READ | BufferUsages::COPY_DST,
+        mapped_at_creation: false,
+    });
+
     commands.insert_resource(ComputeBuffers {
         octree_gpu: octree_gpu_buffer,
         octree_cpu: octree_cpu_buffer,
 
         voxel_gpu: voxel_gpu_buffer,
         voxel_cpu: voxel_cpu_buffer,
+
+        runtime_gpu: runtime_buffer,
+        runtime_cpu: runtime_cpu_buffer,
     });
 }
 
@@ -271,6 +315,7 @@ fn prepare_pipeline(world: &mut World) {
                 uniform_buffer::<OCTreeSettings>(false),
                 storage_buffer::<Vec<OCTree>>(false),
                 storage_buffer::<Vec<Voxel>>(false),
+                storage_buffer::<Vec<OCTreeRuntimeData>>(false),
             ),
         ),
     );
@@ -308,52 +353,6 @@ struct ComputePipeline {
     pipeline_init: CachedComputePipelineId,
     pipeline_finalize: CachedComputePipelineId,
     settings: OCTreeSettings,
-}
-
-impl FromWorld for ComputePipeline {
-    fn from_world(world: &mut World) -> Self {
-        let settings = world.query::<&OCTreeSettings>().single(world).clone();
-
-        let render_device = world.resource::<RenderDevice>();
-        let layout = render_device.create_bind_group_layout(
-            "ComputeOCTree",
-            &BindGroupLayoutEntries::sequential(
-                ShaderStages::COMPUTE,
-                (
-                    uniform_buffer::<GlobalsUniform>(false),
-                    uniform_buffer::<OCTreeSettings>(false),
-                    storage_buffer::<Vec<OCTree>>(false),
-                    storage_buffer::<Vec<Voxel>>(false),
-                ),
-            ),
-        );
-        let shader = world.load_asset("shaders/compute.wgsl"); // TODO rename
-        let pipeline_cache = world.resource::<PipelineCache>();
-        let pipeline_init = pipeline_cache.queue_compute_pipeline(ComputePipelineDescriptor {
-            label: None,
-            layout: vec![layout.clone()],
-            push_constant_ranges: Vec::new(),
-            shader: shader.clone(),
-            shader_defs: vec![],
-            entry_point: "init".into(),
-        });
-
-        let pipeline_finalize = pipeline_cache.queue_compute_pipeline(ComputePipelineDescriptor {
-            label: None,
-            layout: vec![layout.clone()],
-            push_constant_ranges: Vec::new(),
-            shader,
-            shader_defs: vec![],
-            entry_point: "finalize".into(),
-        });
-
-        ComputePipeline {
-            layout,
-            pipeline_init,
-            pipeline_finalize,
-            settings,
-        }
-    }
 }
 
 // use this if we want to communicate with the cpu
@@ -453,9 +452,6 @@ impl Node for ComputeNode {
         };
 
         let pipeline_cache = world.resource::<PipelineCache>();
-
-        // let buffers = world.resource::<ComputeBuffers>();
-        // should get 1 for first iteration
 
         {
             let size = calculate_current_size(pipeline.settings.depth); // first pass, populate data.

@@ -56,6 +56,30 @@ pub struct OCTreeSettings {
     pub scale: f32,
 }
 
+#[repr(C)]
+#[derive(
+    Copy,
+    Debug,
+    Default,
+    Clone,
+    ShaderType,
+    ExtractResource,
+    Resource,
+    Pod,
+    Zeroable,
+    FromBytes,
+    FromZeroes,
+)]
+pub struct OCTreeRuntimeData {
+    pub current_depth: u32,
+}
+
+impl OCTreeRuntimeData {
+    pub fn new(current_depth: u32) -> OCTreeRuntimeData {
+        OCTreeRuntimeData { current_depth }
+    }
+}
+
 // #[derive(Resource, AsBindGroup)]
 // pub struct OCTreeData {
 //     // voxels: BufferVec<Voxel>,
