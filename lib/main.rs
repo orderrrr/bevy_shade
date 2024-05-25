@@ -1,8 +1,11 @@
-use bevy::{asset::AssetMetaCheck, prelude::*};
+use bevy::{
+    diagnostic::{FrameTimeDiagnosticsPlugin, LogDiagnosticsPlugin},
+    prelude::*,
+};
 use shaders::{
     compute::OCTreeComputePlugin,
     fragment::{FragmentPlugin, FragmentSettings},
-    OCTreeSettings,
+    octree::settings_plugin::{OCTreeSettings, OCTreeSettingsPlugin},
 };
 
 mod js_reader;
@@ -12,21 +15,27 @@ mod shaders;
 
 fn main() {
     App::new()
+        .insert_resource(OCTreeSettings {
+            depth: 3,
+            scale: 2.0,
+        })
         .add_plugins((
             // CustomAssetReaderPlugin, // use default assets
-            DefaultPlugins
-                .set(WindowPlugin {
-                    primary_window: Some(Window {
-                        canvas: Some("#bevy_shade_canvas".into()),
-                        ..default()
-                    }),
+            DefaultPlugins.set(WindowPlugin {
+                primary_window: Some(Window {
+                    canvas: Some("#bevy_shade_canvas".into()),
                     ..default()
-                })
-                .set(AssetPlugin {
-                    watch_for_changes_override: Some(true),
-                    meta_check: AssetMetaCheck::Never,
-                    ..Default::default()
                 }),
+                ..default()
+            }),
+            FrameTimeDiagnosticsPlugin::default(),
+            LogDiagnosticsPlugin::default(),
+            // .set(AssetPlugin {
+            //     watch_for_changes_override: Some(true),
+            //     meta_check: AssetMetaCheck::Never,
+            //     ..Default::default()
+            // }),
+            OCTreeSettingsPlugin,
             OCTreeComputePlugin,
             FragmentPlugin,
         ))
@@ -48,11 +57,6 @@ fn setup(mut commands: Commands) {
         },
         FragmentSettings { reset: false },
     ));
-
-    commands.spawn(OCTreeSettings {
-        depth: 1,
-        scale: 1.0,
-    });
 }
 
 // TODO - remove this

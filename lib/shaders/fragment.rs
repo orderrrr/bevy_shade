@@ -1,6 +1,5 @@
 use bevy::core::FrameCount;
 use bevy::render::camera::ExtractedCamera;
-use bevy::render::extract_component::ComponentUniforms;
 use bevy::render::globals::{GlobalsBuffer, GlobalsUniform};
 use bevy::render::render_resource::binding_types::storage_buffer_read_only;
 use bevy::render::texture::{CachedTexture, TextureCache};
@@ -29,7 +28,8 @@ use bevy::{
 };
 
 use super::compute::ComputeBuffers;
-use super::{OCTree, OCTreeSettings, Voxel};
+use super::octree::settings_plugin::{OCTreeBuffer, OCTreeUniform};
+use super::{OCTree, Voxel};
 
 pub const FRAGMENT_001: &str = "shaders/fragment.wgsl";
 
@@ -164,7 +164,7 @@ impl ViewNode for FragmentNode {
     ) -> Result<(), NodeRunError> {
         let fragment_pipeline = world.resource::<FragmentPipeline>();
         let pipeline_cache = world.resource::<PipelineCache>();
-        let octree_settings = world.resource::<ComponentUniforms<OCTreeSettings>>();
+        let octree_settings = world.resource::<OCTreeBuffer>();
 
         // Get the pipeline from the cache
         let (Some(pipeline), Some(compute_buffers)) = (
@@ -203,7 +203,7 @@ impl ViewNode for FragmentNode {
                 &globals_buffer.buffer,
                 octree_cpu.as_entire_binding(),
                 voxel_cpu.as_entire_binding(),
-                octree_settings.uniforms().binding().unwrap(),
+                &octree_settings.buffer,
                 fragment.source,
                 &fragment_history_textures.read.default_view,
                 &fragment_pipeline.nearest_sampler,
@@ -282,7 +282,7 @@ impl FromWorld for FragmentPipeline {
                     uniform_buffer::<GlobalsUniform>(false),
                     storage_buffer_read_only::<Vec<OCTree>>(false),
                     storage_buffer_read_only::<Vec<Voxel>>(false),
-                    uniform_buffer::<OCTreeSettings>(false),
+                    uniform_buffer::<OCTreeUniform>(false),
                     // The screen texture
                     texture_2d(TextureSampleType::Float { filterable: true }),
                     texture_2d(TextureSampleType::Float { filterable: true }),
