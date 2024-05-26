@@ -45,7 +45,7 @@ impl Plugin for FragmentPlugin {
         app.register_type::<FragmentSettings>().add_plugins(());
 
         // We need to get the render app from the main app
-        let Some(render_app) = app.get_sub_app_mut(RenderApp) else {
+        let Ok(render_app) = app.get_sub_app_mut(RenderApp) else {
             return;
         };
 
@@ -84,13 +84,13 @@ impl Plugin for FragmentPlugin {
                 Core2d,
                 // Specify the node ordering.
                 // This will automatically create all required node edges to enforce the given ordering.
-                (Node2d::EndMainPass, FragmentLabel, Node2d::Tonemapping),
+                (Node2d::MainPass, FragmentLabel, Node2d::Tonemapping),
             );
     }
 
     fn finish(&self, app: &mut App) {
         // We need to get the render app from the main app
-        let Some(render_app) = app.get_sub_app_mut(RenderApp) else {
+        let Ok(render_app) = app.get_sub_app_mut(RenderApp) else {
             return;
         };
 

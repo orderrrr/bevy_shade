@@ -8,7 +8,7 @@ use shaders::{
     octree::settings_plugin::{OCTreeSettings, OCTreeSettingsPlugin},
 };
 
-mod js_reader;
+// mod js_reader;
 mod shaders;
 
 // use js_reader::CustomAssetReaderPlugin;

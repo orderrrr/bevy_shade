@@ -4,13 +4,14 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-bevy = { git = "https://github.com/bevyengine/bevy", default-features = false, features = [
+bevy = { version="0.13.2", default-features = false, features = [
     "bevy_asset",
     "bevy_core_pipeline",
     "bevy_render",
     "bevy_winit",
     "bevy_pbr",           # can delete after: 13175 is resolved
-    "multi_threaded",
+    # "multi_threaded",
+    "multi-threaded",
     "webgpu",
     "file_watcher",
     "x11",

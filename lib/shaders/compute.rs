@@ -46,11 +46,12 @@ impl Plugin for OCTreeComputePlugin {
     }
 
     fn finish(&self, app: &mut App) {
-        let settings = app.world().resource::<OCTreeSettings>().clone();
+
+        // let settings = app.world.resource::<OCTreeSettings>().clone();
 
         let render_app = app.sub_app_mut(RenderApp);
 
-        let mut graph = render_app.world_mut().resource_mut::<RenderGraph>();
+        let mut graph = render_app.world.resource_mut::<RenderGraph>();
 
         println!("0 runs before {:?}", CameraDriverLabel);
         graph.add_node(ComputeNodeLabel(0), ComputeNode(0));
@@ -204,6 +205,8 @@ impl FromWorld for ComputePipelines {
 
 impl ComputePipeline {
     fn with_dim(world: &mut World, i: u32) -> Self {
+        let asset_server = world.resource::<AssetServer>();
+
         let settings = world.resource::<OCTreeBuffer>().buffer.get();
 
         let layout = world.resource::<RenderDevice>().create_bind_group_layout(
@@ -219,7 +222,7 @@ impl ComputePipeline {
             ),
         );
 
-        let shader = world.load_asset("shaders/compute.wgsl"); // TODO rename
+        let shader = asset_server.load("shaders/compute.wgsl"); // TODO rename
         let pipeline_cache = world.resource::<PipelineCache>();
 
         let entry = if settings.depth == i {

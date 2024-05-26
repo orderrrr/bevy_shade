@@ -31,7 +31,7 @@ impl Plugin for OCTreeSettingsPlugin {
 
         app.register_type::<OCTreeUniform>();
 
-        if let Some(render_app) = app.get_sub_app_mut(RenderApp) {
+        if let Ok(render_app) = app.get_sub_app_mut(RenderApp) {
             render_app
                 .add_event::<OCTreeBufferReady>()
                 .init_resource::<OCTreeBuffer>()
