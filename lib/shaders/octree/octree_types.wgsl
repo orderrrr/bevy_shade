@@ -3,5 +3,8 @@
 struct OCTreeSettings {
     depth: u32,
     scale: f32,
-    current_depth: u32,
+}
+
+struct OCTreeRuntime {
+    depth: u32,
 }

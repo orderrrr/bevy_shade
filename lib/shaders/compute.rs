@@ -16,7 +16,7 @@ use bevy::{
 use bytemuck::Zeroable;
 
 use super::{
-    octree::settings_plugin::{OCTreeBuffer, OCTreeBufferReady, OCTreeUniform},
+    octree::settings_plugin::{OCTreeBuffer, OCTreeBufferReady, OCTreeRuntime, OCTreeUniform},
     Voxel,
 };
 
@@ -86,8 +86,6 @@ impl FromWorld for ComputeBuffers {
         let settings = world.resource::<OCTreeBuffer>().buffer.get();
         let render_device = world.resource::<RenderDevice>();
 
-        info!("buffers prepared");
-
         let depth = settings.depth;
 
         let max_octree = calculate_full_depth(depth) as usize;
@@ -156,6 +154,7 @@ fn prepare_bind_group(
                     &BindGroupEntries::sequential((
                         &globals.buffer,
                         &settings.buffer,
+                        &settings.runtime_buffer[i as usize],
                         buffers.octree_gpu.as_entire_binding(),
                         buffers.voxel_gpu.as_entire_binding(),
                     )),
@@ -213,6 +212,7 @@ impl ComputePipeline {
                 (
                     uniform_buffer::<GlobalsUniform>(false),
                     uniform_buffer::<OCTreeUniform>(false),
+                    uniform_buffer::<OCTreeRuntime>(false),
                     storage_buffer::<Vec<OCTree>>(false),
                     storage_buffer::<Vec<Voxel>>(false),
                 ),
@@ -250,17 +250,22 @@ struct ComputeNodeLabel(u32);
 struct ComputeNode(u32);
 
 impl Node for ComputeNode {
-    fn update(&mut self, world: &mut World) {
-        world.resource_scope(|world, mut octree_buffer: Mut<OCTreeBuffer>| {
-            let div = world.resource::<RenderDevice>();
-            let qu = world.resource::<RenderQueue>();
-
-            let buf = octree_buffer.buffer.get_mut();
-            buf.current_depth = self.0;
-
-            octree_buffer.buffer.write_buffer(&div, &qu);
-        });
-    }
+    // fn update(&mut self, world: &mut World) {
+    //     world.resource_scope(|world, mut octree_buffer: Mut<OCTreeBuffer>| {
+    //         let div = world.resource::<RenderDevice>();
+    //         let qu = world.resource::<RenderQueue>();
+    //
+    //         let buf = octree_buffer.buffer.get_mut();
+    //         buf.current_depth = self.0;
+    //
+    //         println!(
+    //             "self.0: {}, buf.current_depth: {}",
+    //             self.0, buf.current_depth
+    //         );
+    //
+    //         octree_buffer.buffer.write_buffer(&div, &qu);
+    //     });
+    // }
 
     fn run(
         &self,
@@ -277,9 +282,7 @@ impl Node for ComputeNode {
         };
 
         let pipeline_cache = world.resource::<PipelineCache>();
-
         let depth = self.0;
-
         let size = calculate_current_size(depth); // first pass, populate data.
 
         // if depth > 2 {
@@ -289,8 +292,6 @@ impl Node for ComputeNode {
         if let Some(target_pipeline) =
             pipeline_cache.get_compute_pipeline(pipelines.0[self.0 as usize].pipeline)
         {
-            // println!("DEPTH IS: {}", depth);
-            // println!("SIZE IS: {}", size);
             let mut pass =
                 render_context
                     .command_encoder()

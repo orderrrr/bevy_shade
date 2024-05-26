@@ -1,6 +1,7 @@
 // com fute shader
 #import bevy_render::globals::Globals
 #import octree::OCTreeSettings
+#import octree::OCTreeRuntime
 
 struct OCTree {
     offset: u32,
@@ -14,8 +15,9 @@ struct Voxel {
 
 @group(0) @binding(0) var<uniform> globals: Globals;
 @group(0) @binding(1) var<uniform> settings: OCTreeSettings;
-@group(0) @binding(2) var<storage, read_write> octrees: array<OCTree>;
-@group(0) @binding(3) var<storage, read_write> voxels: array<Voxel>;
+@group(0) @binding(2) var<uniform> runtime: OCTreeRuntime;
+@group(0) @binding(3) var<storage, read_write> octrees: array<OCTree>;
+@group(0) @binding(4) var<storage, read_write> voxels: array<Voxel>;
 
 // 8 total octrees and workers, this is the final level where we should calculate the voxels.
 // steps this compute shader needs to take is as follows:
@@ -25,13 +27,13 @@ struct Voxel {
 @compute @workgroup_size(8,8,8)
 fn init(@builtin(local_invocation_id) global_id: vec3<u32>) {
 
-    let i = settings.current_depth;
+    let i = runtime.depth;
     octrees[count_octrees_below(i, settings.depth) + get_unique_index_for_dim(global_id, i)].mask = 1u;
 
     // let b = settings.scale; // 2.0
     // let point = calc_pos_from_invoc_id(global_id, i);
     // let d = map(point);
-    // let index = count_octrees_below(i, settings.depth) + get_unique_index_for_dim(global_id, settings.current_depth);
+    // let index = count_octrees_below(i, settings.depth) + get_unique_index_for_dim(global_id, runtime.depth);
 
     // octrees[index].mask = 1u;
 
@@ -72,7 +74,7 @@ fn init(@builtin(local_invocation_id) global_id: vec3<u32>) {
 @compute @workgroup_size(8, 8, 8)
 fn finalize(@builtin(local_invocation_id) global_id: vec3<u32>) {
 
-    let i = settings.current_depth;
+    let i = runtime.depth;
     octrees[count_octrees_below(i, settings.depth) + get_unique_index_for_dim(global_id, i)].mask = 1u;
 
     // let index = count_octrees_below(i, settings.depth) + get_unique_index_for_dim(global_id, i);
