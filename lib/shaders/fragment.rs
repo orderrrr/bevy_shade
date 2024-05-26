@@ -27,7 +27,7 @@ use bevy::{
     },
 };
 
-use super::compute::ComputeBuffers;
+use super::compute::{ComputeBindGroups, ComputeBuffers};
 use super::octree::settings_plugin::{OCTreeBuffer, OCTreeUniform};
 use super::{OCTree, Voxel};
 
@@ -69,7 +69,9 @@ impl Plugin for FragmentPlugin {
                 Render,
                 (
                     prepare_fragment_pipelines.in_set(RenderSet::Prepare),
-                    prepare_fragment_history_textures.in_set(RenderSet::PrepareResources),
+                    prepare_fragment_history_textures
+                        .in_set(RenderSet::PrepareResources)
+                        .run_if(resource_exists::<ComputeBindGroups>),
                 ),
             )
             .add_render_graph_node::<ViewNodeRunner<FragmentNode>>(
@@ -99,7 +101,7 @@ impl Plugin for FragmentPlugin {
 }
 
 #[derive(Debug, Hash, PartialEq, Eq, Clone, RenderLabel)]
-struct FragmentLabel;
+pub struct FragmentLabel;
 
 // The post process node used for the render graph
 #[derive(Default)]
@@ -164,12 +166,12 @@ impl ViewNode for FragmentNode {
     ) -> Result<(), NodeRunError> {
         let fragment_pipeline = world.resource::<FragmentPipeline>();
         let pipeline_cache = world.resource::<PipelineCache>();
-        let octree_settings = world.resource::<OCTreeBuffer>();
 
         // Get the pipeline from the cache
-        let (Some(pipeline), Some(compute_buffers)) = (
+        let (Some(pipeline), Some(compute_buffers), Some(octree_settings)) = (
             pipeline_cache.get_render_pipeline(fragment_pipeline_id.0),
             world.get_resource::<ComputeBuffers>(),
+            world.get_resource::<OCTreeBuffer>(),
         ) else {
             return Ok(());
         };
@@ -201,8 +203,8 @@ impl ViewNode for FragmentNode {
             &BindGroupEntries::sequential((
                 // Make sure to use the source view
                 &globals_buffer.buffer,
-                octree_cpu.as_entire_binding(),
-                voxel_cpu.as_entire_binding(),
+                octree_cpu.as_entire_buffer_binding(),
+                voxel_cpu.as_entire_buffer_binding(),
                 &octree_settings.buffer,
                 fragment.source,
                 &fragment_history_textures.read.default_view,

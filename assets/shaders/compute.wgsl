@@ -26,48 +26,46 @@ struct Voxel {
 fn init(@builtin(local_invocation_id) global_id: vec3<u32>) {
 
     let i = settings.current_depth;
-    let b = settings.scale; // 2.0
+    octrees[count_octrees_below(i, settings.depth) + get_unique_index_for_dim(global_id, i)].mask = 1u;
 
-    let point = calc_pos_from_invoc_id(global_id, i);
+    // let b = settings.scale; // 2.0
+    // let point = calc_pos_from_invoc_id(global_id, i);
+    // let d = map(point);
+    // let index = count_octrees_below(i, settings.depth) + get_unique_index_for_dim(global_id, settings.current_depth);
 
-    let d = map(point);
+    // octrees[index].mask = 1u;
 
-    let index = get_unique_index_for_dim(global_id, i);
+    // // if d <= (b / f32(1u << i)) {
+    // if true {
 
-    octrees[index].mask = 0u;
+    //     for (var j: u32 = 0; j < 2; j++) {
+    //         for (var k: u32 = 0; k < 2; k++) {
+    //             for (var l: u32 = 0; l < 2; l++) {
 
-    // if d <= (b / f32(1u << i)) * 0.5 {
-    if true {
+    //                 let rvpos = vec3<u32>(j, k, l);
+    //                 let vpos = get_child_pos(global_id, rvpos);
+    //                 let vip = calc_pos_from_invoc_id(vpos, i + 1);
+    //                 let voxid = get_unique_index_for_dim(vpos, i + 1);
+    //                 let vidx = get_unique_index_for_dim(rvpos, 2u);
+    //                 let d2 = map(vip);
 
-        for (var j: u32 = 0; j < 2; j++) {
-            for (var k: u32 = 0; k < 2; k++) {
-                for (var l: u32 = 0; l < 2; l++) {
+    //                 // if d2 < (b / f32(1u << i + 1)) * 0.5 {
+    //                 if true {
 
-                    let rvpos = vec3<u32>(j, k, l);
-                    let vpos = get_child_pos(global_id, rvpos);
-                    let vip = calc_pos_from_invoc_id(vpos, i + 1);
-                    let voxid = get_unique_index_for_dim(vpos, i + 1);
-                    let vidx = get_unique_index_for_dim(rvpos, 2u);
-                    let d2 = map(vip);
+    //                     voxels[voxid].col = 1u;
+    //                     voxels[voxid].mat = 1u;
 
-                    // if d2 < (b / f32(1u << i + 1)) * 0.5 {
-                    if true {
-                    // if true {
+    //                     octrees[index].mask = insertBits(octrees[index].mask, 1u, vidx, 1u);
 
-                        voxels[voxid].col = 1u;
-                        voxels[voxid].mat = 1u;
+    //                     continue;
+    //                 }
 
-                        octrees[index].mask = insertBits(octrees[index].mask, 1u, vidx, 1u);
-
-                        continue;
-                    }
-
-                    voxels[voxid].col = 0u;
-                    voxels[voxid].mat = 0u;
-                }
-            }
-        }
-    }
+    //                 voxels[voxid].col = 0u;
+    //                 voxels[voxid].mat = 0u;
+    //             }
+    //         }
+    //     }
+    // }
 }
 
 // 1 worker which will calculate the
@@ -75,35 +73,37 @@ fn init(@builtin(local_invocation_id) global_id: vec3<u32>) {
 fn finalize(@builtin(local_invocation_id) global_id: vec3<u32>) {
 
     let i = settings.current_depth;
-    let depth = 1u << i;
+    octrees[count_octrees_below(i, settings.depth) + get_unique_index_for_dim(global_id, i)].mask = 1u;
 
-    let index = count_octrees_below(i, settings.depth) + get_unique_index_for_dim(global_id, i);
+    // let index = count_octrees_below(i, settings.depth) + get_unique_index_for_dim(global_id, i);
 
-    let b = settings.scale;
+    // let b = settings.scale;
 
-    let point = calc_pos_from_invoc_id(global_id, i);
-    let d = map(point);
+    // let point = calc_pos_from_invoc_id(global_id, i);
+    // let d = map(point);
 
-    octrees[index].mask = 0u;
+    // octrees[index].mask = 1u;
 
-    for (var j: u32 = 0; j < depth; j++) {
-        for (var k: u32 = 0; k < depth; k++) {
-            for (var l: u32 = 0; l < depth; l++) {
 
-                let vid = vec3<u32>(j, k, l);
-                let vpos = get_child_pos(global_id, vid);
-                let voxid = get_unique_index_for_dim(vpos, i + 1);
+    // octrees[index].mask = 0u;
 
-                if true {
-                    let vidx = get_unique_index_for_dim(vid, 2u);
+    // for (var j: u32 = 0; j < 2; j++) {
+    //     for (var k: u32 = 0; k < 2; k++) {
+    //         for (var l: u32 = 0; l < 2; l++) {
 
-                    octrees[index].mask = insertBits(octrees[index].mask, 1u, vidx, 1u);
-                }
-            }
-        }
-    }
+    //             let vid = vec3<u32>(j, k, l);
+    //             let vpos = get_child_pos(global_id, vid);
+    //             let cid = count_octrees_below(i + 1, settings.depth) + get_unique_index_for_dim(vpos, i + 1);
+    //             let child_octree = octrees[cid];
 
-    octrees[count_octrees_below(i, 1u) + 0u].mask = 200u;
+    //             if true {
+    //                 let vidx = get_unique_index_for_dim(vid, 2u);
+
+    //                 octrees[index].mask = insertBits(octrees[index].mask, 1u, vidx, 1u);
+    //             }
+    //         }
+    //     }
+    // }
 }
 
 fn sphere(pos: vec3<f32>, r: f32) -> f32 {
@@ -113,7 +113,7 @@ fn sphere(pos: vec3<f32>, r: f32) -> f32 {
 
 fn map(pos: vec3<f32>) -> f32 {
 
-    return sphere(pos, 0.5);
+    return sphere(pos, 2.0);
 }
 
 
