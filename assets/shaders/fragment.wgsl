@@ -29,6 +29,34 @@ const DEBUG: bool = false;
 @group(0) @binding(6) var nearest_sampler: sampler;
 @group(0) @binding(7) var linear_sampler: sampler;
 
+
+
+
+
+
+
+
+// TODO octree parser can be greatly improved by:
+
+// get the octree at the current pos, 
+// if it is not filled, get the next possible position and move p based on its rayDirection
+// if it is filled but the voxel was not hit, either get the next voxel or get the next octree up.
+// based on wether or not its the edge of the octree or not,
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 struct Output {
   @location(0) view_target: vec4<f32>,
   @location(1) history: vec4<f32>,
