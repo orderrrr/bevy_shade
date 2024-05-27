@@ -24,8 +24,8 @@ struct Voxel {
 // 1. check if there is anything within bounds
 // 2. update parent octree with result of within bounds
 // 3. calculate all the voxels within its bounds (8 total)
-@compute @workgroup_size(8,8,8)
-fn init(@builtin(local_invocation_id) global_id: vec3<u32>) {
+@compute @workgroup_size(1,1,1)
+fn init(@builtin(global_invocation_id) global_id: vec3<u32>) {
 
     let i = runtime.depth;
     octrees[count_octrees_below(i, settings.depth) + get_unique_index_for_dim(global_id, i)].mask = 1u;
@@ -71,8 +71,8 @@ fn init(@builtin(local_invocation_id) global_id: vec3<u32>) {
 }
 
 // 1 worker which will calculate the
-@compute @workgroup_size(8, 8, 8)
-fn finalize(@builtin(local_invocation_id) global_id: vec3<u32>) {
+@compute @workgroup_size(1, 1, 1)
+fn finalize(@builtin(global_invocation_id) global_id: vec3<u32>) {
 
     let i = runtime.depth;
     octrees[count_octrees_below(i, settings.depth) + get_unique_index_for_dim(global_id, i)].mask = 1u;

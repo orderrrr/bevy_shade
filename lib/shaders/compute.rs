@@ -54,24 +54,14 @@ impl Plugin for OCTreeComputePlugin {
 
         println!("0 runs before {:?}", CameraDriverLabel);
         graph.add_node(ComputeNodeLabel(0), ComputeNode(0));
-        graph.add_node(ComputeNodeLabel(1), ComputeNode(1));
-        graph.add_node(ComputeNodeLabel(2), ComputeNode(2));
-        graph.add_node(ComputeNodeLabel(3), ComputeNode(3));
+        graph.add_node_edge(ComputeNodeLabel(0), CameraDriverLabel);
 
-        graph.add_node_edges((
-            ComputeNodeLabel(3),
-            ComputeNodeLabel(2),
-            ComputeNodeLabel(1),
-            ComputeNodeLabel(0),
-            CameraDriverLabel,
-        ))
+        for i in 1..settings.depth + 1 {
+            println!("{} runs before {}", i, i - 1);
 
-        // for i in 1..settings.depth + 1 {
-        //     println!("{} runs before {}", i, i - 1);
-        //
-        //     graph.add_node(ComputeNodeLabel(i), ComputeNode(i));
-        //     graph.add_node_edge(ComputeNodeLabel(i), ComputeNodeLabel(i - 1));
-        // }
+            graph.add_node(ComputeNodeLabel(i), ComputeNode(i));
+            graph.add_node_edge(ComputeNodeLabel(i), ComputeNodeLabel(i - 1));
+        }
     }
 }
 
@@ -273,10 +263,11 @@ impl Node for ComputeNode {
         render_context: &mut RenderContext,
         world: &World,
     ) -> Result<(), NodeRunError> {
-        let (Some(bind_groups), Some(pipelines), Some(octree_buffer)) = (
+        let (Some(bind_groups), Some(pipelines), Some(octree_buffer), Some(compute_buffers)) = (
             world.get_resource::<ComputeBindGroups>(),
             world.get_resource::<ComputePipelines>(),
             world.get_resource::<OCTreeBuffer>(),
+            world.get_resource::<ComputeBuffers>(),
         ) else {
             return Ok(());
         };
