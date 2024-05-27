@@ -44,6 +44,5 @@ pub struct Voxel {
     FromZeroes,
 )]
 pub struct OCTree {
-    offset: u32, // array offset in voxey/octree
     mask: u32,
 }

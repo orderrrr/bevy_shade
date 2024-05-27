@@ -15,8 +15,7 @@ struct OCTreeSettings {
 }
 
 struct OCTree {
-    @location(0) offset: u32,
-    @location(1) mask: u32,
+    @location(0) mask: u32,
 }
 
 struct Voxel {
@@ -129,8 +128,7 @@ fn finalize(@builtin(global_invocation_id) global_id: vec3<u32>, @builtin(num_wo
 #import bevy_render::globals::Globals
 
 struct OCTree {
-    @location(0) offset: u32,
-    @location(1) mask: u32,
+    @location(0) mask: u32,
 }
 
 struct Voxel {
