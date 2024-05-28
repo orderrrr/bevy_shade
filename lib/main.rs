@@ -1,6 +1,6 @@
 use bevy::{
     diagnostic::{FrameTimeDiagnosticsPlugin, LogDiagnosticsPlugin},
-    prelude::*,
+    prelude::*, render::{settings::{Backends, RenderCreation, WgpuSettings}, RenderPlugin},
 };
 use shaders::{
     compute::OCTreeComputePlugin,
@@ -11,8 +11,6 @@ use shaders::{
 mod js_reader;
 mod shaders;
 
-// use js_reader::CustomAssetReaderPlugin;
-
 fn main() {
     App::new()
         .insert_resource(OCTreeSettings {
@@ -20,21 +18,21 @@ fn main() {
             scale: 2.0,
         })
         .add_plugins((
-            // CustomAssetReaderPlugin, // use default assets
-            DefaultPlugins.set(WindowPlugin {
-                primary_window: Some(Window {
-                    // canvas: Some("#bevy_shade_canvas".into()),
+            DefaultPlugins
+                .set(WindowPlugin {
+                    primary_window: Some(Window { ..default() }),
+
                     ..default()
+                })
+                .set(RenderPlugin {
+                    render_creation: RenderCreation::Automatic(WgpuSettings {
+                        backends: Some(Backends::VULKAN),
+                        ..default()
+                    }),
+                    ..Default::default()
                 }),
-                ..default()
-            }),
             FrameTimeDiagnosticsPlugin::default(),
             LogDiagnosticsPlugin::default(),
-            // .set(AssetPlugin {
-            //     watch_for_changes_override: Some(true),
-            //     meta_check: AssetMetaCheck::Never,
-            //     ..Default::default()
-            // }),
             OCTreeSettingsPlugin,
             OCTreeComputePlugin,
             FragmentPlugin,
@@ -56,13 +54,3 @@ fn setup(mut commands: Commands) {
         FragmentSettings { reset: false },
     ));
 }
-
-// TODO - remove this
-// /// This system will poll the channel and try to get the data sent from the render world
-// fn receive(receiver: Res<MainWorldReceiver>) {
-//     // We don't want to block the main world on this,
-//     // so we use try_recv which attempts to receive without blocking
-//     if let Ok(data) = receiver.try_recv() {
-//         info!("Received data from render world: {data:?}");
-//     }
-// }
