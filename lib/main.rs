@@ -16,7 +16,7 @@ mod shaders;
 fn main() {
     App::new()
         .insert_resource(OCTreeSettings {
-            depth: 3,
+            depth: 5,
             scale: 2.0,
         })
         .add_plugins((

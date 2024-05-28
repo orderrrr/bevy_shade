@@ -18,7 +18,7 @@ struct Voxel {
     mat: u32,
 }
 
-fn get_closest_octree(point: vec3<f32>, dim: u32, scale: f32) -> vec3<i32> {
+fn get_enclosed_octree(point: vec3<f32>, dim: u32, scale: f32) -> vec3<i32> {
     // Calculate the offset
     let offset = scale / 2.0;
     let adjusted_point = point + vec3<f32>(offset, offset, offset);

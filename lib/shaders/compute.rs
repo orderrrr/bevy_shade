@@ -9,7 +9,7 @@ use bevy::{
             binding_types::{storage_buffer, uniform_buffer},
             BindGroup, BindGroupLayout, *,
         },
-        renderer::{RenderContext, RenderDevice, RenderQueue},
+        renderer::{RenderContext, RenderDevice},
         Render, RenderApp, RenderSet,
     },
 };
@@ -240,23 +240,6 @@ struct ComputeNodeLabel(u32);
 struct ComputeNode(u32);
 
 impl Node for ComputeNode {
-    // fn update(&mut self, world: &mut World) {
-    //     world.resource_scope(|world, mut octree_buffer: Mut<OCTreeBuffer>| {
-    //         let div = world.resource::<RenderDevice>();
-    //         let qu = world.resource::<RenderQueue>();
-    //
-    //         let buf = octree_buffer.buffer.get_mut();
-    //         buf.current_depth = self.0;
-    //
-    //         println!(
-    //             "self.0: {}, buf.current_depth: {}",
-    //             self.0, buf.current_depth
-    //         );
-    //
-    //         octree_buffer.buffer.write_buffer(&div, &qu);
-    //     });
-    // }
-
     fn run(
         &self,
         _graph: &mut RenderGraphContext,
@@ -275,7 +258,7 @@ impl Node for ComputeNode {
         let pipeline_cache = world.resource::<PipelineCache>();
         let depth = self.0;
         let size = calculate_current_size(depth); // first pass, populate data.
-
+        
         // if depth > 2 {
         //     println!("!!!!!!!!!!!!");
         // }

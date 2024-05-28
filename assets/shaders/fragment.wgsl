@@ -6,8 +6,8 @@
     OCTreeRuntime,
     Voxel,
     OCTree,
-    get_closest_octree,
-    calc_pos_from_invoc_id, 
+    get_enclosed_octree,
+    calc_pos_from_invoc_id,
     get_child_pos,
     get_unique_index_for_dim,
     get_child_index,
@@ -38,7 +38,7 @@ const DEBUG: bool = false;
 
 // TODO octree parser can be greatly improved by:
 
-// get the octree at the current pos, 
+// get the octree at the current pos,
 // if it is not filled, get the next possible position and move p based on its rayDirection
 // if it is filled but the voxel was not hit, either get the next voxel or get the next octree up.
 // based on wether or not its the edge of the octree or not,
@@ -67,6 +67,7 @@ fn fragment(in: FullscreenVertexOutput) -> Output {
 
     var total = vec3(0.0);
 
+    // for AA
     for (var m: i32 = 0; m < AA; m++) {
         for (var n: i32 = 0; n < AA; n++) {
             var col = vec3(sin(globals.time), cos(globals.time + 5.0), cos(sin(globals.time + 1.0)));
@@ -107,7 +108,7 @@ fn fragment(in: FullscreenVertexOutput) -> Output {
 
     total = total / f32(AA * AA);
 
-    // s-surve    
+    // s-surve
     total = clamp(total, vec3<f32>(0.0), vec3<f32>(1.0));
     total = total * total * (3.0 - 2.0 * total);
 
@@ -150,7 +151,7 @@ fn cast_ray(ro: vec3<f32>, rd: vec3<f32>) -> f32 {
     for (var i: u32 = 0; i < 100; i++) {
 
         let pos = ro + t * rd;
-        let h = map(pos);
+        let h = map(pos, rd);
 
         if h < 0.001 {
             break;
@@ -170,135 +171,195 @@ fn cast_ray(ro: vec3<f32>, rd: vec3<f32>) -> f32 {
     return t;
 }
 
-fn map(pos: vec3<f32>) -> f32 {
+fn map(pos: vec3<f32>, rd: vec3<f32>) -> f32 {
 
     let d1 = length(pos) - 1;
     let d2 = pos.y - (-1.4);
 
-    let oc = distance_to_octree(pos, 0u);
+    // this needs to be more friendly to the raycast.
+    let oc = distance_to_octree(pos, rd, 0u);
 
     return min(oc, d2);
 }
 
-fn distance_to_octree(rp: vec3<f32>, dim: u32) -> f32 {
+fn get_next_octree_pos(rp: vec3<f32> , rd: vec3<f32>, i: u32, scale: f32) -> vec3<i32> {
 
-    var i = dim;
     let d = 1u << i;
 
-    var h = settings.scale / 2.0;
+    // normalize the rd and multiply by the size of the current dim voxel, putting us somewhere inside the next grid
+    let np = rp + (normalize(rd) * (scale / f32(d)));
 
-    var gpi = get_closest_octree(rp, 1u, settings.scale); // grid position
-    var gp = vec3<u32>(0u);
+    // get the next octree in that position.
+    return get_enclosed_octree(np, d, settings.scale); // grid position
+}
 
-    let pos = calc_pos_from_invoc_id(gp, i, settings.scale);
-    let dist = get_dist(rp - pos, i);
+fn get_distance_to_next_octree(gp: vec3<u32>, rp: vec3<f32>, i: u32, scale: f32) -> f32 {
 
     let index = count_octrees_below(i, settings.depth) + get_unique_index_for_dim(gp, i);
     let octree = octrees[index];
+    let pos = calc_pos_from_invoc_id(gp, i, settings.scale);
 
-    // first octree , exit if we are too far from the octree or nothing is there, skip.
-    if octree.mask > 0u && dist < (settings.scale / f32(1u << i)) + 0.1 {
+    // get the distance from the old position to the next octree
+    return get_dist(rp - pos, i);
+}
 
-        // draw debug frame, exit if we hit it.
-        if DEBUG {
-            h = cube_frame(rp - pos, vec3((settings.scale / f32(d)) / 2.0), 0.002);
-        }
+// currently we only have one octree, i would like to have multiple but for now assuming only one.
+fn valid_octree_pos(gp: vec3<i32>, i: u32) -> bool {
 
-        if h < 0.001 {
-            return h;
-        }
-
-        // final depth should probably just check the voxels around it as well.
-        while i < settings.depth + 1 {
-
-            i = i + 1;
-
-            if i == settings.depth + 1u {
-
-                // get closest voxel octree that is active.
-                for (var j: u32 = 0; j < 2; j++) {
-                    for (var k: u32 = 0; k < 2; k++) {
-                        for (var l: u32 = 0; l < 2; l++) {
-
-                            let v = vec3<u32>(j, k, l);
-                            let closest = get_child_pos(gp, v);
-
-                            let id = get_unique_index_for_dim(closest, i);
-                            let oc = voxels[id];
-
-                            if oc.col < 1u {
-
-                                continue;
-                            }
-
-                            let po = calc_pos_from_invoc_id(closest, i, settings.scale);
-
-                            h = min(get_dist(rp - po, i), h);
-
-                            if DEBUG {
-                                let po = calc_pos_from_invoc_id(closest, i, settings.scale);
-                                h = min(cube_frame(rp - po, vec3((settings.scale) / f32(1u << i)) / 2.0, 0.002), h);
-                            }
-                        }
-                    }
-                }
+    // make sure it is within the octree bounds.
+    return
+        gp.x > -1 &&
+        gp.y > -1 &&
+        gp.z > -1 &&
+        gp.x < i32((1u << i) -1) &&
+        gp.y < i32((1u << i) -1) &&
+        gp.z < i32((1u << i) -1);
+}
 
 
-                return h;
-            }
+fn get_dist_for_dim(rp: vec3<f32>, rd: vec3<f32>, i: u32) -> f32 {
+    var dist = settings.scale;
+    let d = 1u << i;
+    var h = settings.scale / 2.0;
+    let offset = (settings.scale / f32(d));
+    var gp = get_enclosed_octree(rp, i, settings.scale); // grid position
+    var gpu = vec3<u32>(gp);
+    var ngp = get_next_octree_pos(rp, rd, i, settings.scale);
+    var ngpu = vec3<u32>(ngp);
+    let index = count_octrees_below(i, settings.depth) + get_unique_index_for_dim(gpu, i);
+    let octree = octrees[index];
 
-            var dist = 100.;
-            var co = vec3<u32>(0);
+    if (octree.mask < 1u) {
 
-            var octrees_below = count_octrees_below(i, settings.depth);
+        if (!valid_octree_pos(gp, i) && valid_octree_pos(ngp, i)) {
 
-            // get closest voxel octree that is active.
-            for (var j: u32 = 0; j < 2; j++) {
-                for (var k: u32 = 0; k < 2; k++) {
-                    for (var l: u32 = 0; l < 2; l++) {
-
-                        let v = vec3<u32>(j, k, l);
-                        let closest = get_child_pos(gp, v);
-
-                        let id = octrees_below + get_unique_index_for_dim(closest, i);
-                        let oc = octrees[id];
-
-                        if oc.mask < 1u {
-
-                            continue;
-                        }
-
-                        let po = calc_pos_from_invoc_id(closest, i, settings.scale);
-
-                        let cdist = get_dist(rp - po, i);
-
-                        if cdist < dist {
-                            dist = cdist;
-                            co = closest;
-                        }
-                    }
-                }
-            }
-
-            if dist == 100. {
-                return h;
-            }
-
-            gp = co;
-
-            let po = calc_pos_from_invoc_id(co, i, settings.scale);
-
-            if DEBUG {
-                h = min(cube_frame(rp - po, vec3((settings.scale) / f32(1u << i)) / 2.0, 0.002), h);
-            }
-
-            if h < 0.001 || dist > (settings.scale / f32(1u << i - 1)) + 0.1 {
-                return h;
-            }
+            dist = get_distance_to_next_octree(ngpu, rp, i, settings.scale);
         }
     }
 
-    return h;
+    let pos = calc_pos_from_invoc_id(gpu, i, settings.scale);
+
+    return min(get_dist(rp - pos, i), dist);
+}
+
+fn distance_to_octree(rp: vec3<f32>, rd: vec3<f32>, dim: u32) -> f32 {
+
+    var i = dim;
+    var dist = settings.scale;
+
+    dist = get_dist_for_dim(rp, rd, i);
+
+    if (dist < 0.001) {
+
+        i = i + 1;
+        dist = get_dist_for_dim(rp, rd, i);
+    }
+
+    return dist;
+
+    // // first octree , exit if we are too far from the octree or nothing is there, skip.
+    // if octree.mask > 0u && dist < (settings.scale / f32(1u << i)) + 0.1 {
+
+    //     // draw debug frame, exit if we hit it.
+    //     if DEBUG {
+    //         h = cube_frame(rp - pos, vec3((settings.scale / f32(d)) / 2.0), 0.002);
+    //     }
+
+    //     if h < 0.001 {
+    //         return h;
+    //     }
+
+    //     // final depth should probably just check the voxels around it as well.
+    //     while i < settings.depth + 1 {
+
+    //         i = i + 1;
+
+    //         if i == settings.depth + 1u {
+
+    //             // get closest voxel octree that is active.
+    //             for (var j: u32 = 0; j < 2; j++) {
+    //                 for (var k: u32 = 0; k < 2; k++) {
+    //                     for (var l: u32 = 0; l < 2; l++) {
+
+    //                         let v = vec3<u32>(j, k, l);
+    //                         let closest = get_child_pos(gp, v);
+
+    //                         let id = get_unique_index_for_dim(closest, i);
+    //                         let oc = voxels[id];
+
+    //                         if oc.col < 1u {
+
+    //                             continue;
+    //                         }
+
+    //                         let po = calc_pos_from_invoc_id(closest, i, settings.scale);
+
+    //                         h = min(get_dist(rp - po, i), h);
+
+    //                         if DEBUG {
+    //                             let po = calc_pos_from_invoc_id(closest, i, settings.scale);
+    //                             h = min(cube_frame(rp - po, vec3((settings.scale) / f32(1u << i)) / 2.0, 0.002), h);
+    //                         }
+    //                     }
+    //                 }
+    //             }
+
+
+    //             return h;
+    //         }
+
+    //         var dist = 100.;
+    //         var co = vec3<u32>(0);
+
+    //         var octrees_below = count_octrees_below(i, settings.depth);
+
+    //         // get closest voxel octree that is active.
+    //         for (var j: u32 = 0; j < 2; j++) {
+    //             for (var k: u32 = 0; k < 2; k++) {
+    //                 for (var l: u32 = 0; l < 2; l++) {
+
+    //                     let v = vec3<u32>(j, k, l);
+    //                     let closest = get_child_pos(gp, v);
+
+    //                     let id = octrees_below + get_unique_index_for_dim(closest, i);
+    //                     let oc = octrees[id];
+
+    //                     if oc.mask < 1u {
+
+    //                         continue;
+    //                     }
+
+    //                     let po = calc_pos_from_invoc_id(closest, i, settings.scale);
+
+    //                     let cdist = get_dist(rp - po, i);
+
+    //                     if cdist < dist {
+    //                         dist = cdist;
+    //                         co = closest;
+    //                     }
+    //                 }
+    //             }
+    //         }
+
+    //         if dist == 100. {
+    //             return h;
+    //         }
+
+    //         gp = co;
+
+    //         let po = calc_pos_from_invoc_id(co, i, settings.scale);
+
+    //         if DEBUG {
+    //             h = min(cube_frame(rp - po, vec3((settings.scale) / f32(1u << i)) / 2.0, 0.002), h);
+    //         }
+
+    //         if h < 0.001 || dist > (settings.scale / f32(1u << i - 1)) + 0.1 {
+    //             return h;
+    //         }
+    //     }
+    // }
+
+    // return h;
 }
 
 fn get_dist(pos: vec3<f32>, i: u32) -> f32 {
@@ -317,9 +378,9 @@ fn calc_normal(pos: vec3<f32>) -> vec3<f32> {
     let e = vec2(0.0001, 0.0);
 
     return normalize(vec3(
-        map(pos + e.xyy) - map(pos - e.xyy),
-        map(pos + e.yxy) - map(pos - e.yxy),
-        map(pos + e.yyx) - map(pos - e.yyx),
+        map(pos + e.xyy, vec3<f32>(0.0)) - map(pos - e.xyy, vec3<f32>(0.0)),
+        map(pos + e.yxy, vec3<f32>(0.0)) - map(pos - e.yxy, vec3<f32>(0.0)),
+        map(pos + e.yyx, vec3<f32>(0.0)) - map(pos - e.yyx, vec3<f32>(0.0)),
     ));
 }
 
