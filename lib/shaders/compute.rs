@@ -1,4 +1,4 @@
-use crate::shaders::{octree::settings_plugin::OCTreeSettings, OCTree};
+use crate::shaders::{octree::settings_plugin::OCTreeSettings, OCTree, Voxel};
 use bevy::{
     prelude::*,
     render::{
@@ -15,33 +15,52 @@ use bevy::{
 };
 use bytemuck::Zeroable;
 use crossbeam_channel::{Receiver, Sender};
-use zerocopy::{FromBytes as _, FromZeroes};
+use zerocopy::FromBytes;
 
-use super::{
-    octree::settings_plugin::{OCTreeBuffer, OCTreeBufferReady, OCTreeRuntime, OCTreeUniform},
-    Voxel,
+use super::octree::settings_plugin::{
+    OCTreeBuffer, OCTreeBufferReady, OCTreeRuntime, OCTreeUniform,
 };
 
 pub struct OCTreeComputePlugin;
 
 /// This will receive asynchronously any data sent from the render world
-#[derive(Resource, Deref)]
-pub struct MainWorldOCTreeReceiver(Receiver<Vec<OCTree>>);
+#[derive(Resource)]
+pub struct MainWorldOCTreeReceiver {
+    pub voxels: Receiver<Vec<Voxel>>,
+    pub octrees: Receiver<Vec<OCTree>>,
+}
+
+impl MainWorldOCTreeReceiver {
+    pub fn new(voxels: Receiver<Vec<Voxel>>, octrees: Receiver<Vec<OCTree>>) -> Self {
+        MainWorldOCTreeReceiver { voxels, octrees }
+    }
+}
 
 /// This will send asynchronously any data to the main world
-#[derive(Resource, Deref)]
-pub struct RenderWorldOCTreeSender(Sender<Vec<OCTree>>);
+#[derive(Resource)]
+pub struct RenderWorldOCTreeSender {
+    pub voxels: Sender<Vec<Voxel>>,
+    pub octrees: Sender<Vec<OCTree>>,
+}
+
+impl RenderWorldOCTreeSender {
+    pub fn new(voxels: Sender<Vec<Voxel>>, octrees: Sender<Vec<OCTree>>) -> Self {
+        RenderWorldOCTreeSender { voxels, octrees }
+    }
+}
 
 impl Plugin for OCTreeComputePlugin {
     #[cfg(feature = "readback")]
     #[allow(unused_parens)]
     fn build(&self, app: &mut App) {
-        let (s, r) = crossbeam_channel::unbounded();
-        app.insert_resource(MainWorldOCTreeReceiver(r));
+        let (s1, r1) = crossbeam_channel::unbounded::<Vec<Voxel>>();
+        let (s2, r2) = crossbeam_channel::unbounded::<Vec<OCTree>>();
+
+        app.insert_resource(MainWorldOCTreeReceiver::new(r1, r2));
 
         let render_app = app.sub_app_mut(RenderApp);
         render_app
-            .insert_resource(RenderWorldOCTreeSender(s))
+            .insert_resource(RenderWorldOCTreeSender::new(s1, s2))
             .add_systems(
                 Render,
                 (
@@ -57,8 +76,11 @@ impl Plugin for OCTreeComputePlugin {
                         .in_set(RenderSet::PrepareBindGroups)
                         .run_if(not(resource_exists::<ComputeBindGroups>))
                         .run_if(resource_exists::<ComputePipelines>),
-                    map_and_read_buffer
-                        .run_if(resource_exists::<ComputeBuffers>)
+                    map_and_read_buffer_octree
+                        .run_if(resource_exists::<ComputeBindGroups>)
+                        .after(RenderSet::Render),
+                    map_and_read_buffer_voxel
+                        .run_if(resource_exists::<ComputeBindGroups>)
                         .after(RenderSet::Render),
                 ),
             );
@@ -127,23 +149,12 @@ impl FromWorld for ComputeBuffers {
         let max_voxel = calculate_max_voxel(depth) as usize;
 
         let mut init_data = encase::StorageBuffer::new(Vec::new());
-        let data = vec![OCTree::default(); max_octree];
+        let data = vec![OCTree::zeroed(); max_octree];
         init_data.write(&data).expect("failed to write buffer");
 
         // The buffer that will be accessed by the gpu
         let octree_gpu_buffer = render_device.create_buffer_with_data(&BufferInitDescriptor {
             label: Some("octree_gpu_buffer"),
-            contents: init_data.as_ref(),
-            usage: BufferUsages::STORAGE | BufferUsages::COPY_SRC,
-        });
-
-        let mut init_data = encase::StorageBuffer::new(Vec::new());
-        let data = vec![Voxel::default(); max_voxel];
-        init_data.write(&data).expect("failed to write buffer");
-
-        // The buffer that will be accessed by the gpu
-        let voxel_gpu_buffer = render_device.create_buffer_with_data(&BufferInitDescriptor {
-            label: Some("voxel_gpu_buffer"),
             contents: init_data.as_ref(),
             usage: BufferUsages::STORAGE | BufferUsages::COPY_SRC,
         });
@@ -154,6 +165,18 @@ impl FromWorld for ComputeBuffers {
             usage: BufferUsages::MAP_READ | BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
+
+        let mut init_data = encase::StorageBuffer::new(Vec::new());
+        let data = vec![Voxel { col: 1, mat: 1 }; max_voxel];
+        init_data.write(&data).expect("failed to write buffer");
+
+        // The buffer that will be accessed by the gpu
+        let voxel_gpu_buffer = render_device.create_buffer_with_data(&BufferInitDescriptor {
+            label: Some("voxel_gpu_buffer"),
+            contents: init_data.as_ref(),
+            usage: BufferUsages::STORAGE | BufferUsages::COPY_SRC,
+        });
+
         let voxel_cpu_buffer = render_device.create_buffer(&BufferDescriptor {
             label: Some("readback_buffer"),
             size: (max_voxel * std::mem::size_of::<Voxel>()) as u64,
@@ -171,7 +194,7 @@ impl FromWorld for ComputeBuffers {
     }
 }
 
-fn map_and_read_buffer(
+fn map_and_read_buffer_octree(
     render_device: Res<RenderDevice>,
     buffers: Res<ComputeBuffers>,
     sender: Res<RenderWorldOCTreeSender>,
@@ -179,13 +202,6 @@ fn map_and_read_buffer(
     let buffer_slice = buffers.octree_cpu.slice(..);
 
     let (s, r) = crossbeam_channel::unbounded::<()>();
-
-    let (tx, rx) = futures::channel::oneshot::channel();
-    buffer_slice.map_async(MapMode::Read, move |result| {
-        tx.send(result).unwrap();
-    });
-    render_device.poll(Maintain::Wait);
-    let result = futures::executor::block_on(rx);
 
     buffer_slice.map_async(MapMode::Read, move |r| match r {
         Ok(_) => s.send(()).expect("Failed to send map update"),
@@ -203,11 +219,45 @@ fn map_and_read_buffer(
             .map(|chunk| OCTree::read_from(chunk).unwrap())
             .collect::<Vec<OCTree>>();
         sender
+            .octrees
             .send(data)
             .expect("Failed to send data to main world");
     }
 
     buffers.octree_cpu.unmap();
+}
+
+fn map_and_read_buffer_voxel(
+    render_device: Res<RenderDevice>,
+    buffers: Res<ComputeBuffers>,
+    sender: Res<RenderWorldOCTreeSender>,
+) {
+    let buffer_slice = buffers.voxel_cpu.slice(..);
+
+    let (s, r) = crossbeam_channel::unbounded::<()>();
+
+    buffer_slice.map_async(MapMode::Read, move |r| match r {
+        Ok(_) => s.send(()).expect("Failed to send map update"),
+        Err(err) => panic!("Failed to map buffer {err}"),
+    });
+
+    render_device.poll(Maintain::wait()).panic_on_timeout();
+
+    r.recv().expect("Failed to receive the map_async message");
+
+    {
+        let buffer_view = buffer_slice.get_mapped_range();
+        let data = buffer_view
+            .chunks(std::mem::size_of::<Voxel>())
+            .map(|chunk| Voxel::read_from(chunk).unwrap())
+            .collect::<Vec<Voxel>>();
+        sender
+            .voxels
+            .send(data)
+            .expect("Failed to send data to main world");
+    }
+
+    buffers.voxel_cpu.unmap();
 }
 
 fn prepare_compute_buffers(world: &mut World) {
@@ -376,13 +426,29 @@ impl Node for ComputeNode {
             pass.dispatch_workgroups(size, size, size);
         }
 
-        render_context.command_encoder().copy_buffer_to_buffer(
-            &compute_buffers.octree_gpu,
-            0,
-            &compute_buffers.octree_cpu,
-            0,
-            (octree_buffer.buffer.get().depth as usize * std::mem::size_of::<OCTree>()) as u64,
-        );
+        {
+            let voxels_max = calculate_max_voxel(octree_buffer.buffer.get().depth) as usize;
+
+            render_context.command_encoder().copy_buffer_to_buffer(
+                &compute_buffers.voxel_gpu,
+                0,
+                &compute_buffers.voxel_cpu,
+                0,
+                (voxels_max * std::mem::size_of::<Voxel>()) as u64,
+            );
+        }
+
+        {
+            let octree_max = calculate_full_depth(octree_buffer.buffer.get().depth) as usize;
+
+            render_context.command_encoder().copy_buffer_to_buffer(
+                &compute_buffers.octree_gpu,
+                0,
+                &compute_buffers.octree_cpu,
+                0,
+                (octree_max * std::mem::size_of::<OCTree>()) as u64,
+            );
+        }
 
         Ok(())
     }

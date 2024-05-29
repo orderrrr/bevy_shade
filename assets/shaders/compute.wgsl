@@ -28,6 +28,10 @@
 @compute @workgroup_size(1,1,1)
 fn init(@builtin(global_invocation_id) global_id: vec3<u32>) {
 
+    voxels[0u].mat = 0u;
+    voxels[1u].mat = 0u;
+    voxels[2u].mat = 0u;
+
     // let i = runtime.depth;
     // // octrees[count_octrees_below(i, settings.depth) + get_unique_index_for_dim(global_id, i)].mask = 0u;
 
@@ -54,15 +58,15 @@ fn init(@builtin(global_invocation_id) global_id: vec3<u32>) {
     //                 if d2 < (b / (f32(1u << i + 1)) / 2.0) {
 
     //                     voxels[voxid].col = 1u;
-    //                     voxels[voxid].mat = 1u;
+    //                     // voxels[voxid].mat = 1u;
 
     //                     octrees[index].mask = insertBits(octrees[index].mask, 1u, vidx, 1u);
 
     //                     continue;
     //                 }
 
-    //                 voxels[voxid].col = 0u;
-    //                 voxels[voxid].mat = 0u;
+    //                 // voxels[voxid].col = 0u;
+    //                 // voxels[voxid].mat = 0u;
     //             }
     //         }
     //     }
@@ -72,16 +76,6 @@ fn init(@builtin(global_invocation_id) global_id: vec3<u32>) {
 // 1 worker which will calculate the
 @compute @workgroup_size(1, 1, 1)
 fn finalize(@builtin(global_invocation_id) global_id: vec3<u32>) {
-
-    octrees[0].mask = 1u;
-    octrees[1].mask = 1u;
-    octrees[2].mask = 1u;
-    octrees[3].mask = 1u;
-    octrees[4].mask = 1u;
-    octrees[5].mask = 1u;
-    octrees[6].mask = 1u;
-    octrees[7].mask = 1u;
-    octrees[10].mask = 1u;
 
     // let i = runtime.depth;
     // // octrees[count_octrees_below(i, settings.depth) + get_unique_index_for_dim(global_id, i)].mask = 0u;

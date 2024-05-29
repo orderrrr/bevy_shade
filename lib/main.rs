@@ -1,6 +1,12 @@
+use std::{fs::File, io::Write};
+
 use bevy::{
     diagnostic::{FrameTimeDiagnosticsPlugin, LogDiagnosticsPlugin},
-    prelude::*, render::{settings::{Backends, RenderCreation, WgpuSettings}, RenderPlugin},
+    prelude::*,
+    render::{
+        settings::{Backends, RenderCreation, WgpuSettings},
+        RenderPlugin,
+    },
 };
 use bevy_shade_lib::shaders::{
     compute::{MainWorldOCTreeReceiver, OCTreeComputePlugin},
@@ -8,7 +14,7 @@ use bevy_shade_lib::shaders::{
     octree::settings_plugin::{OCTreeSettings, OCTreeSettingsPlugin},
 };
 
-#[cfg(feature ="readback")]
+#[cfg(feature = "readback")]
 fn main() {
     App::new()
         .insert_resource(OCTreeSettings {
@@ -17,13 +23,21 @@ fn main() {
         })
         .add_plugins((
             // CustomAssetReaderPlugin, // use default assets
-            DefaultPlugins.set(WindowPlugin {
-                primary_window: Some(Window {
-                    // canvas: Some("#bevy_shade_canvas".into()),
+            DefaultPlugins
+                .set(WindowPlugin {
+                    primary_window: Some(Window {
+                        // canvas: Some("#bevy_shade_canvas".into()),
+                        ..default()
+                    }),
+                    ..default()
+                })
+                .set(RenderPlugin {
+                    render_creation: RenderCreation::Automatic(WgpuSettings {
+                        backends: Some(Backends::VULKAN),
+                        ..default()
+                    }),
                     ..default()
                 }),
-                ..default()
-            }),
             FrameTimeDiagnosticsPlugin::default(),
             LogDiagnosticsPlugin::default(),
             // .set(AssetPlugin {
@@ -36,7 +50,8 @@ fn main() {
             FragmentPlugin,
         ))
         .add_systems(Startup, setup)
-        .add_systems(Update, receive)
+        .add_systems(FixedUpdate, receive)
+        .insert_resource(Time::<Fixed>::from_seconds(5.))
         .run();
 }
 
@@ -50,8 +65,10 @@ fn main() {
         .add_plugins((
             DefaultPlugins
                 .set(WindowPlugin {
-                    primary_window: Some(Window { ..default() }),
-
+                    primary_window: Some(Window {
+                        // canvas: Some("#bevy_shade_canvas".into()),
+                        ..default()
+                    }),
                     ..default()
                 })
                 .set(RenderPlugin {
@@ -59,7 +76,7 @@ fn main() {
                         backends: Some(Backends::VULKAN),
                         ..default()
                     }),
-                    ..Default::default()
+                    ..default()
                 }),
             FrameTimeDiagnosticsPlugin::default(),
             LogDiagnosticsPlugin::default(),
@@ -87,9 +104,23 @@ fn setup(mut commands: Commands) {
 
 /// This system will poll the channel and try to get the data sent from the render world
 fn receive(receiver: Res<MainWorldOCTreeReceiver>) {
+    if let Ok(data) = receiver.voxels.try_recv() {
+        let serialized = serde_json::to_string(&data).unwrap();
+
+        let mut file = File::create("voxels.json").unwrap();
+        file.write_all(serialized.as_bytes()).unwrap();
+
+        info!("Saved Voxels to file.");
+    }
+
     // We don't want to block the main world on this,
     // so we use try_recv which attempts to receive without blocking
-    if let Ok(data) = receiver.try_recv() {
-        info!("Received data from render world: {data:?}");
+    if let Ok(data) = receiver.octrees.try_recv() {
+        let serialized = serde_json::to_string(&data).unwrap();
+
+        let mut file = File::create("octrees.json").unwrap();
+        file.write_all(serialized.as_bytes()).unwrap();
+
+        info!("Saved Octree to file.");
     }
 }
