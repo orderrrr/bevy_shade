@@ -14,6 +14,8 @@ use bevy::{
     },
 };
 use bytemuck::Zeroable;
+use crossbeam_channel::{Receiver, Sender};
+use zerocopy::{FromBytes as _, FromZeroes};
 
 use super::{
     octree::settings_plugin::{OCTreeBuffer, OCTreeBufferReady, OCTreeRuntime, OCTreeUniform},
@@ -22,7 +24,47 @@ use super::{
 
 pub struct OCTreeComputePlugin;
 
+/// This will receive asynchronously any data sent from the render world
+#[derive(Resource, Deref)]
+pub struct MainWorldOCTreeReceiver(Receiver<Vec<OCTree>>);
+
+/// This will send asynchronously any data to the main world
+#[derive(Resource, Deref)]
+pub struct RenderWorldOCTreeSender(Sender<Vec<OCTree>>);
+
 impl Plugin for OCTreeComputePlugin {
+    #[cfg(feature = "readback")]
+    #[allow(unused_parens)]
+    fn build(&self, app: &mut App) {
+        let (s, r) = crossbeam_channel::unbounded();
+        app.insert_resource(MainWorldOCTreeReceiver(r));
+
+        let render_app = app.sub_app_mut(RenderApp);
+        render_app
+            .insert_resource(RenderWorldOCTreeSender(s))
+            .add_systems(
+                Render,
+                (
+                    prepare_compute_buffers
+                        .in_set(RenderSet::Prepare)
+                        .run_if(not(resource_exists::<ComputeBuffers>))
+                        .run_if(on_event::<OCTreeBufferReady>()),
+                    prepare_compute_pipeline
+                        .in_set(RenderSet::Prepare)
+                        .run_if(not(resource_exists::<ComputePipelines>))
+                        .run_if(resource_exists::<ComputeBuffers>),
+                    prepare_bind_group
+                        .in_set(RenderSet::PrepareBindGroups)
+                        .run_if(not(resource_exists::<ComputeBindGroups>))
+                        .run_if(resource_exists::<ComputePipelines>),
+                    map_and_read_buffer
+                        .run_if(resource_exists::<ComputeBuffers>)
+                        .after(RenderSet::Render),
+                ),
+            );
+    }
+
+    #[cfg(not(feature = "readback"))]
     #[allow(unused_parens)]
     fn build(&self, app: &mut App) {
         let render_app = app.sub_app_mut(RenderApp);
@@ -69,6 +111,9 @@ impl Plugin for OCTreeComputePlugin {
 pub struct ComputeBuffers {
     pub octree_gpu: Buffer,
     pub voxel_gpu: Buffer,
+
+    pub octree_cpu: Buffer,
+    pub voxel_cpu: Buffer,
 }
 
 impl FromWorld for ComputeBuffers {
@@ -82,32 +127,87 @@ impl FromWorld for ComputeBuffers {
         let max_voxel = calculate_max_voxel(depth) as usize;
 
         let mut init_data = encase::StorageBuffer::new(Vec::new());
-        let data = vec![OCTree::zeroed(); max_octree];
+        let data = vec![OCTree::default(); max_octree];
         init_data.write(&data).expect("failed to write buffer");
 
         // The buffer that will be accessed by the gpu
         let octree_gpu_buffer = render_device.create_buffer_with_data(&BufferInitDescriptor {
             label: Some("octree_gpu_buffer"),
             contents: init_data.as_ref(),
-            usage: BufferUsages::STORAGE,
+            usage: BufferUsages::STORAGE | BufferUsages::COPY_SRC,
         });
 
         let mut init_data = encase::StorageBuffer::new(Vec::new());
-        let data = vec![Voxel::zeroed(); max_voxel];
+        let data = vec![Voxel::default(); max_voxel];
         init_data.write(&data).expect("failed to write buffer");
 
         // The buffer that will be accessed by the gpu
         let voxel_gpu_buffer = render_device.create_buffer_with_data(&BufferInitDescriptor {
             label: Some("voxel_gpu_buffer"),
             contents: init_data.as_ref(),
-            usage: BufferUsages::STORAGE,
+            usage: BufferUsages::STORAGE | BufferUsages::COPY_SRC,
+        });
+
+        let octree_cpu_buffer = render_device.create_buffer(&BufferDescriptor {
+            label: Some("readback_buffer"),
+            size: (max_octree * std::mem::size_of::<OCTree>()) as u64,
+            usage: BufferUsages::MAP_READ | BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+        let voxel_cpu_buffer = render_device.create_buffer(&BufferDescriptor {
+            label: Some("readback_buffer"),
+            size: (max_voxel * std::mem::size_of::<Voxel>()) as u64,
+            usage: BufferUsages::MAP_READ | BufferUsages::COPY_DST,
+            mapped_at_creation: false,
         });
 
         ComputeBuffers {
             octree_gpu: octree_gpu_buffer,
             voxel_gpu: voxel_gpu_buffer,
+
+            octree_cpu: octree_cpu_buffer,
+            voxel_cpu: voxel_cpu_buffer,
         }
     }
+}
+
+fn map_and_read_buffer(
+    render_device: Res<RenderDevice>,
+    buffers: Res<ComputeBuffers>,
+    sender: Res<RenderWorldOCTreeSender>,
+) {
+    let buffer_slice = buffers.octree_cpu.slice(..);
+
+    let (s, r) = crossbeam_channel::unbounded::<()>();
+
+    let (tx, rx) = futures::channel::oneshot::channel();
+    buffer_slice.map_async(MapMode::Read, move |result| {
+        tx.send(result).unwrap();
+    });
+    render_device.poll(Maintain::Wait);
+    let result = futures::executor::block_on(rx);
+
+    buffer_slice.map_async(MapMode::Read, move |r| match r {
+        Ok(_) => s.send(()).expect("Failed to send map update"),
+        Err(err) => panic!("Failed to map buffer {err}"),
+    });
+
+    render_device.poll(Maintain::wait()).panic_on_timeout();
+
+    r.recv().expect("Failed to receive the map_async message");
+
+    {
+        let buffer_view = buffer_slice.get_mapped_range();
+        let data = buffer_view
+            .chunks(std::mem::size_of::<OCTree>())
+            .map(|chunk| OCTree::read_from(chunk).unwrap())
+            .collect::<Vec<OCTree>>();
+        sender
+            .send(data)
+            .expect("Failed to send data to main world");
+    }
+
+    buffers.octree_cpu.unmap();
 }
 
 fn prepare_compute_buffers(world: &mut World) {
@@ -240,6 +340,7 @@ struct ComputeNodeLabel(u32);
 struct ComputeNode(u32);
 
 impl Node for ComputeNode {
+    #[cfg(feature = "readback")]
     fn run(
         &self,
         _graph: &mut RenderGraphContext,
@@ -258,10 +359,51 @@ impl Node for ComputeNode {
         let pipeline_cache = world.resource::<PipelineCache>();
         let depth = self.0;
         let size = calculate_current_size(depth); // first pass, populate data.
-        
-        // if depth > 2 {
-        //     println!("!!!!!!!!!!!!");
-        // }
+
+        if let Some(target_pipeline) =
+            pipeline_cache.get_compute_pipeline(pipelines.0[self.0 as usize].pipeline)
+        {
+            let mut pass =
+                render_context
+                    .command_encoder()
+                    .begin_compute_pass(&ComputePassDescriptor {
+                        label: Some(format!("GPU readback compute pass: {}", self.0).as_str()),
+                        ..default()
+                    });
+
+            pass.set_bind_group(0, &bind_groups.0[self.0 as usize], &[]);
+            pass.set_pipeline(target_pipeline);
+            pass.dispatch_workgroups(size, size, size);
+        }
+
+        render_context.command_encoder().copy_buffer_to_buffer(
+            &compute_buffers.octree_gpu,
+            0,
+            &compute_buffers.octree_cpu,
+            0,
+            (octree_buffer.buffer.get().depth as usize * std::mem::size_of::<OCTree>()) as u64,
+        );
+
+        Ok(())
+    }
+
+    #[cfg(not(feature = "readback"))]
+    fn run(
+        &self,
+        _graph: &mut RenderGraphContext,
+        render_context: &mut RenderContext,
+        world: &World,
+    ) -> Result<(), NodeRunError> {
+        let (Some(bind_groups), Some(pipelines)) = (
+            world.get_resource::<ComputeBindGroups>(),
+            world.get_resource::<ComputePipelines>(),
+        ) else {
+            return Ok(());
+        };
+
+        let pipeline_cache = world.resource::<PipelineCache>();
+        let depth = self.0;
+        let size = calculate_current_size(depth); // first pass, populate data.
 
         if let Some(target_pipeline) =
             pipeline_cache.get_compute_pipeline(pipelines.0[self.0 as usize].pipeline)

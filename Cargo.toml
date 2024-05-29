@@ -24,10 +24,22 @@ encase = "0.8.0"
 crossbeam-channel = "0.5.12"
 zerocopy = { version = "0.7.34", features = ["derive"] }
 cgmath = "0.18.0"
+futures = "0.3.30"
+
+[features]
+readback = []
+
+[lib]
+name = "bevy_shade_lib"
+path = "lib/lib.rs"
 
 [[bin]]
 name = "bevy_shade"
 path = "lib/main.rs"
+
+[[bin]]
+name = "bevy_shade_cpu"
+path = "lib/cpu.rs"
 
 [profile.dev]
 opt-level = 1

@@ -182,7 +182,7 @@ fn map(pos: vec3<f32>, rd: vec3<f32>) -> f32 {
     return min(oc, d2);
 }
 
-fn get_next_octree_pos(rp: vec3<f32> , rd: vec3<f32>, i: u32, scale: f32) -> vec3<i32> {
+fn get_next_octree_pos(rp: vec3<f32>, rd: vec3<f32>, i: u32, scale: f32) -> vec3<i32> {
 
     let d = 1u << i;
 
@@ -208,38 +208,72 @@ fn valid_octree_pos(gp: vec3<i32>, i: u32) -> bool {
 
     // make sure it is within the octree bounds.
     return
-        gp.x > -1 &&
-        gp.y > -1 &&
-        gp.z > -1 &&
-        gp.x < i32((1u << i) -1) &&
-        gp.y < i32((1u << i) -1) &&
-        gp.z < i32((1u << i) -1);
+        gp.x > -1 && gp.y > -1 && gp.z > -1 && gp.x < i32((1u << i) - 1) && gp.y < i32((1u << i) - 1) && gp.z < i32((1u << i) - 1);
 }
 
 
 fn get_dist_for_dim(rp: vec3<f32>, rd: vec3<f32>, i: u32) -> f32 {
     var dist = settings.scale;
+
     let d = 1u << i;
-    var h = settings.scale / 2.0;
-    let offset = (settings.scale / f32(d));
-    var gp = get_enclosed_octree(rp, i, settings.scale); // grid position
+
+    var gp = get_enclosed_octree(rp, d, settings.scale); // grid position
     var gpu = vec3<u32>(gp);
+
     var ngp = get_next_octree_pos(rp, rd, i, settings.scale);
     var ngpu = vec3<u32>(ngp);
+
     let index = count_octrees_below(i, settings.depth) + get_unique_index_for_dim(gpu, i);
     let octree = octrees[index];
 
-    if (octree.mask < 1u) {
+    if octree.mask > 0u {
 
-        if (!valid_octree_pos(gp, i) && valid_octree_pos(ngp, i)) {
+        dist = get_distance_to_next_octree(gpu, rp, i, settings.scale);
+    }
 
-            dist = get_distance_to_next_octree(ngpu, rp, i, settings.scale);
+    if !(octree.mask > 0u) {
+
+        dist = get_distance_to_next_octree(ngpu, rp, i, settings.scale);
+    }
+
+    return dist;
+}
+
+fn get_dist_for_voxels(rp: vec3<f32>, rd: vec3<f32>) -> f32 {
+    var dist = settings.scale;
+
+    let i = settings.depth;
+
+    let d = 1u << i;
+
+    var gp = get_enclosed_octree(rp, d, settings.scale); // grid position
+    var gpu = vec3<u32>(gp);
+
+    var h = settings.scale;
+
+    for (var j: u32 = 0; j < 2; j++) {
+        for (var k: u32 = 0; k < 2; k++) {
+            for (var l: u32 = 0; l < 2; l++) {
+
+                let v = vec3<u32>(j, k, l);
+                let closest = get_child_pos(gpu, v);
+
+                let id = get_unique_index_for_dim(closest, i);
+                let oc = voxels[id];
+
+                if oc.col < 1u {
+
+                    continue;
+                }
+
+                let po = calc_pos_from_invoc_id(closest, i, settings.scale);
+
+                h = min(get_dist(rp - po, i + 1u), h);
+            }
         }
     }
 
-    let pos = calc_pos_from_invoc_id(gpu, i, settings.scale);
-
-    return min(get_dist(rp - pos, i), dist);
+    return h;
 }
 
 fn distance_to_octree(rp: vec3<f32>, rd: vec3<f32>, dim: u32) -> f32 {
@@ -251,9 +285,17 @@ fn distance_to_octree(rp: vec3<f32>, rd: vec3<f32>, dim: u32) -> f32 {
 
     if (dist < 0.001) {
 
-        i = i + 1;
-        dist = get_dist_for_dim(rp, rd, i);
+        while dist < 0.001 && i <= settings.depth {
+
+            i = i + 1;
+            dist = get_dist_for_dim(rp, rd, i);
+        }
+
+        if (dist < 0.001) {
+            dist = get_dist_for_voxels(rp, rd);
+        }
     }
+    
 
     return dist;
 

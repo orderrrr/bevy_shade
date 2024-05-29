@@ -28,80 +28,90 @@
 @compute @workgroup_size(1,1,1)
 fn init(@builtin(global_invocation_id) global_id: vec3<u32>) {
 
-    let i = runtime.depth;
-    // octrees[count_octrees_below(i, settings.depth) + get_unique_index_for_dim(global_id, i)].mask = 0u;
+    // let i = runtime.depth;
+    // // octrees[count_octrees_below(i, settings.depth) + get_unique_index_for_dim(global_id, i)].mask = 0u;
 
-    let b = settings.scale; // 2.0
-    let point = calc_pos_from_invoc_id(global_id, i, settings.scale);
-    let d = map(point);
-    let index = count_octrees_below(i, settings.depth) + get_unique_index_for_dim(global_id, i);
+    // let b = settings.scale; // 2.0
+    // let point = calc_pos_from_invoc_id(global_id, i, settings.scale);
+    // let d = map(point);
+    // let index = count_octrees_below(i, settings.depth) + get_unique_index_for_dim(global_id, i);
 
-    octrees[index].mask = 0u;
+    // octrees[index].mask = 0u;
 
-    if d <= (b / (f32(1u << i) / 2.0)) {
+    // if d <= (b / (f32(1u << i) / 2.0)) {
 
-        for (var j: u32 = 0; j < 2; j++) {
-            for (var k: u32 = 0; k < 2; k++) {
-                for (var l: u32 = 0; l < 2; l++) {
+    //     for (var j: u32 = 0; j < 2; j++) {
+    //         for (var k: u32 = 0; k < 2; k++) {
+    //             for (var l: u32 = 0; l < 2; l++) {
 
-                    let rvpos = vec3<u32>(j, k, l);
-                    let vpos = get_child_pos(global_id, rvpos);
-                    let vip = calc_pos_from_invoc_id(vpos, i + 1, settings.scale);
-                    let voxid = get_unique_index_for_dim(vpos, i + 1);
-                    let vidx = get_unique_index_for_dim(rvpos, 2u);
-                    let d2 = map(vip);
+    //                 let rvpos = vec3<u32>(j, k, l);
+    //                 let vpos = get_child_pos(global_id, rvpos);
+    //                 let vip = calc_pos_from_invoc_id(vpos, i + 1, settings.scale);
+    //                 let voxid = get_unique_index_for_dim(vpos, i + 1);
+    //                 let vidx = get_unique_index_for_dim(rvpos, 2u);
+    //                 let d2 = map(vip);
 
-                    if d2 < (b / (f32(1u << i + 1)) / 2.0) {
+    //                 if d2 < (b / (f32(1u << i + 1)) / 2.0) {
 
-                        voxels[voxid].col = 1u;
-                        voxels[voxid].mat = 1u;
+    //                     voxels[voxid].col = 1u;
+    //                     voxels[voxid].mat = 1u;
 
-                        octrees[index].mask = insertBits(octrees[index].mask, 1u, vidx, 1u);
+    //                     octrees[index].mask = insertBits(octrees[index].mask, 1u, vidx, 1u);
 
-                        continue;
-                    }
+    //                     continue;
+    //                 }
 
-                    voxels[voxid].col = 0u;
-                    voxels[voxid].mat = 0u;
-                }
-            }
-        }
-    }
+    //                 voxels[voxid].col = 0u;
+    //                 voxels[voxid].mat = 0u;
+    //             }
+    //         }
+    //     }
+    // }
 }
 
 // 1 worker which will calculate the
 @compute @workgroup_size(1, 1, 1)
 fn finalize(@builtin(global_invocation_id) global_id: vec3<u32>) {
 
-    let i = runtime.depth;
-    // octrees[count_octrees_below(i, settings.depth) + get_unique_index_for_dim(global_id, i)].mask = 0u;
+    octrees[0].mask = 1u;
+    octrees[1].mask = 1u;
+    octrees[2].mask = 1u;
+    octrees[3].mask = 1u;
+    octrees[4].mask = 1u;
+    octrees[5].mask = 1u;
+    octrees[6].mask = 1u;
+    octrees[7].mask = 1u;
+    octrees[10].mask = 1u;
 
-    let index = count_octrees_below(i, settings.depth) + get_unique_index_for_dim(global_id, i);
+    // let i = runtime.depth;
+    // // octrees[count_octrees_below(i, settings.depth) + get_unique_index_for_dim(global_id, i)].mask = 0u;
 
-    let b = settings.scale;
+    // let index = count_octrees_below(i, settings.depth) + get_unique_index_for_dim(global_id, i);
 
-    let point = calc_pos_from_invoc_id(global_id, i, settings.scale);
-    let d = map(point);
+    // let b = settings.scale;
 
-    octrees[index].mask = 0u;
+    // let point = calc_pos_from_invoc_id(global_id, i, settings.scale);
+    // let d = map(point);
 
-    for (var j: u32 = 0; j < 2; j++) {
-        for (var k: u32 = 0; k < 2; k++) {
-            for (var l: u32 = 0; l < 2; l++) {
+    // octrees[index].mask = 0u;
 
-                let vid = vec3<u32>(j, k, l);
-                let vpos = get_child_pos(global_id, vid);
-                let cid = count_octrees_below(i + 1, settings.depth) + get_unique_index_for_dim(vpos, i + 1);
-                let child_octree = octrees[cid];
+    // for (var j: u32 = 0; j < 2; j++) {
+    //     for (var k: u32 = 0; k < 2; k++) {
+    //         for (var l: u32 = 0; l < 2; l++) {
 
-                if true {
-                    let vidx = get_unique_index_for_dim(vid, 2u);
+    //             let vid = vec3<u32>(j, k, l);
+    //             let vpos = get_child_pos(global_id, vid);
+    //             let cid = count_octrees_below(i + 1, settings.depth) + get_unique_index_for_dim(vpos, i + 1);
+    //             let child_octree = octrees[cid];
 
-                    octrees[index].mask = insertBits(octrees[index].mask, 1u, vidx, 1u);
-                }
-            }
-        }
-    }
+    //             if true {
+    //                 let vidx = get_unique_index_for_dim(vid, 2u);
+
+    //                 octrees[index].mask = insertBits(octrees[index].mask, 1u, vidx, 1u);
+    //             }
+    //         }
+    //     }
+    // }
 }
 
 fn sphere(pos: vec3<f32>, r: f32) -> f32 {

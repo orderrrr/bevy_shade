@@ -1,20 +1,20 @@
-use cgmath::Vector3;
+use cgmath::{Vector2, Vector3};
 
 const SCALE: f32 = 10.0;
 
 #[allow(dead_code)]
-fn get_child_pos(parent_pos: &Vector3<u32>, child_rel_pos: &Vector3<u32>) -> Vector3<u32> {
+pub fn get_child_pos(parent_pos: &Vector3<u32>, child_rel_pos: &Vector3<u32>) -> Vector3<u32> {
     parent_pos * 2 + child_rel_pos
 }
 
 #[allow(dead_code)]
-fn get_unique_index(pos: &Vector3<u32>, i: u32) -> u32 {
+pub fn get_unique_index(pos: &Vector3<u32>, i: u32) -> u32 {
     let d = 1 << i;
     pos.x + pos.y * d + pos.z * d * d
 }
 
 #[allow(dead_code)]
-fn get_pos_from_grid_pos(pos: &Vector3<u32>, i: u32) -> Vector3<f32> {
+pub fn get_pos_from_grid_pos(pos: &Vector3<u32>, i: u32) -> Vector3<f32> {
     let s = SCALE as f32;
     let d = (1 << i) as f32;
     let scale: f32 = s / d;
@@ -24,29 +24,12 @@ fn get_pos_from_grid_pos(pos: &Vector3<u32>, i: u32) -> Vector3<f32> {
 }
 
 #[allow(dead_code)]
-fn count_octrees_below(cd: u32, i: u32) -> u32 {
+pub fn count_octrees_below(cd: u32, i: u32) -> u32 {
     ((8_u32.pow(i + 1) as f64) / 7.0 - (8_u32.pow(cd + 1) as f64) / 7.0) as u32
 }
 
-// #[allow(dead_code)]
-// fn get_closest_octree(rp: &Vector3<f32>, i: u32) -> Vector3<i32> {
-//     let res = round(&rp, (SCALE as f32 / (1 << i) as f32) * 0.5);
-//     println!("res: {:?}", res);
-//     return casti(&res);
-// }
-
-// #[allow(dead_code)]
-// fn get_closest_octree(point: &Vector3<f32>, dim: usize) -> Vector3<i32> {
-//     let scale = (dim as f32) / 2.0;
-//     let scaled_point = *point * scale;
-//     let grid_x = scaled_point.x.round() as i32;
-//     let grid_y = scaled_point.y.round() as i32;
-//     let grid_z = scaled_point.z.round() as i32;
-//     Vector3::new(grid_x, grid_y, grid_z)
-// }
-
 #[allow(dead_code)]
-fn get_closest_octree(point: &Vector3<f32>, dim: usize) -> Vector3<i32> {
+pub fn get_closest_octree(point: &Vector3<f32>, dim: usize) -> Vector3<i32> {
 
     let offset = SCALE / 2.0;
     let point = point + Vector3::new(offset, offset, offset);
@@ -63,15 +46,23 @@ fn get_closest_octree(point: &Vector3<f32>, dim: usize) -> Vector3<i32> {
     Vector3::new(grid_x, grid_y, grid_z)
 }
 
-fn casti(v: &Vector3<f32>) -> Vector3<i32> {
+pub fn casti(v: &Vector3<f32>) -> Vector3<i32> {
     return Vector3::new(v.x as i32, v.y as i32, v.z as i32);
 }
 
-fn floor(vector: Vector3<f32>) -> Vector3<f32> {
+pub fn castf(v: &Vector3<u32>) -> Vector3<f32> {
+    return Vector3::new(v.x as f32, v.y as f32, v.z as f32);
+}
+
+pub fn castf2(v: &Vector2<u32>) -> Vector2<f32> {
+    return Vector2::new(v.x as f32, v.y as f32);
+}
+
+pub fn floor(vector: Vector3<f32>) -> Vector3<f32> {
     Vector3::new(vector.x.floor(), vector.y.floor(), vector.z.floor())
 }
 
-fn ceil(vector: Vector3<f32>) -> Vector3<f32> {
+pub fn ceil(vector: Vector3<f32>) -> Vector3<f32> {
     Vector3::new(vector.x.ceil(), vector.y.ceil(), vector.z.ceil())
 }
 

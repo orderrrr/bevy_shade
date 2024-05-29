@@ -7,7 +7,6 @@ use zerocopy::{FromBytes, FromZeroes};
 
 pub mod compute;
 pub mod fragment;
-pub mod lib;
 pub mod octree;
 
 #[repr(C)]
