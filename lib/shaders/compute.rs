@@ -15,7 +15,7 @@ use bevy::{
 };
 use bytemuck::Zeroable;
 use crossbeam_channel::{Receiver, Sender};
-use zerocopy::FromBytes;
+use zerocopy::{FromBytes, FromZeroes};
 
 use super::octree::settings_plugin::{
     OCTreeBuffer, OCTreeBufferReady, OCTreeRuntime, OCTreeUniform,
@@ -149,7 +149,7 @@ impl FromWorld for ComputeBuffers {
         let max_voxel = calculate_max_voxel(depth) as usize;
 
         let mut init_data = encase::StorageBuffer::new(Vec::new());
-        let data = vec![OCTree::zeroed(); max_octree];
+        let data = vec![OCTree::new_zeroed(); max_octree];
         init_data.write(&data).expect("failed to write buffer");
 
         // The buffer that will be accessed by the gpu
@@ -167,7 +167,7 @@ impl FromWorld for ComputeBuffers {
         });
 
         let mut init_data = encase::StorageBuffer::new(Vec::new());
-        let data = vec![Voxel { col: 1, mat: 1 }; max_voxel];
+        let data = vec![Voxel::new_zeroed(); max_voxel];
         init_data.write(&data).expect("failed to write buffer");
 
         // The buffer that will be accessed by the gpu

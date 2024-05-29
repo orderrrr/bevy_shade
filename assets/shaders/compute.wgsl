@@ -28,9 +28,9 @@
 @compute @workgroup_size(1,1,1)
 fn init(@builtin(global_invocation_id) global_id: vec3<u32>) {
 
-    voxels[0u].mat = 0u;
-    voxels[1u].mat = 0u;
-    voxels[2u].mat = 0u;
+    voxels[0u].mat = 1u;
+    voxels[1u].mat = 1u;
+    voxels[2u].mat = 1u;
 
     // let i = runtime.depth;
     // // octrees[count_octrees_below(i, settings.depth) + get_unique_index_for_dim(global_id, i)].mask = 0u;
