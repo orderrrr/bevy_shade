@@ -1,14 +1,12 @@
 use bevy::{
     diagnostic::{FrameTimeDiagnosticsPlugin, LogDiagnosticsPlugin},
-    prelude::*,
+    prelude::*, render::{settings::{Backends, RenderCreation, WgpuSettings}, RenderPlugin},
 };
 use bevy_shade_lib::shaders::{
     compute::{MainWorldOCTreeReceiver, OCTreeComputePlugin},
     fragment::{FragmentPlugin, FragmentSettings},
     octree::settings_plugin::{OCTreeSettings, OCTreeSettingsPlugin},
 };
-
-// use js_reader::CustomAssetReaderPlugin;
 
 #[cfg(feature ="readback")]
 fn main() {
@@ -50,21 +48,21 @@ fn main() {
             scale: 2.0,
         })
         .add_plugins((
-            // CustomAssetReaderPlugin, // use default assets
-            DefaultPlugins.set(WindowPlugin {
-                primary_window: Some(Window {
-                    // canvas: Some("#bevy_shade_canvas".into()),
+            DefaultPlugins
+                .set(WindowPlugin {
+                    primary_window: Some(Window { ..default() }),
+
                     ..default()
+                })
+                .set(RenderPlugin {
+                    render_creation: RenderCreation::Automatic(WgpuSettings {
+                        backends: Some(Backends::VULKAN),
+                        ..default()
+                    }),
+                    ..Default::default()
                 }),
-                ..default()
-            }),
             FrameTimeDiagnosticsPlugin::default(),
             LogDiagnosticsPlugin::default(),
-            // .set(AssetPlugin {
-            //     watch_for_changes_override: Some(true),
-            //     meta_check: AssetMetaCheck::Never,
-            //     ..Default::default()
-            // }),
             OCTreeSettingsPlugin,
             OCTreeComputePlugin,
             FragmentPlugin,

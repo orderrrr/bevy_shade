@@ -294,7 +294,6 @@ mod tests {
         );
     }
 
-
     #[test]
     fn closest() {
         test_closest(8);
