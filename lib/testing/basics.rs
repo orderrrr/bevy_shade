@@ -29,7 +29,7 @@ pub fn count_octrees_below(cd: u32, i: u32) -> u32 {
 }
 
 #[allow(dead_code)]
-pub fn get_closest_octree(point: &Vector3<f32>, dim: usize) -> Vector3<i32> {
+pub fn get_enclosed_octree(point: &Vector3<f32>, dim: usize) -> Vector3<i32> {
 
     let offset = SCALE / 2.0;
     let point = point + Vector3::new(offset, offset, offset);
@@ -279,17 +279,17 @@ mod tests {
         let half_dim = (dim as i32 / 2) as f32;
 
         assert_eq!(
-            get_closest_octree(&Vector3::new(lower + delta, lower + delta, lower + delta), dim),
+            get_enclosed_octree(&Vector3::new(lower + delta, lower + delta, lower + delta), dim),
             Vector3::new(0, 0, 0)
         );
 
         assert_eq!(
-            get_closest_octree(&Vector3::new(0.0, 0.0, 0.0), dim),
+            get_enclosed_octree(&Vector3::new(0.0, 0.0, 0.0), dim),
             Vector3::new(half_dim as i32, half_dim as i32, half_dim as i32)
         );
 
         assert_eq!(
-            get_closest_octree(&Vector3::new(upper - delta, upper - delta, upper - delta), dim),
+            get_enclosed_octree(&Vector3::new(upper - delta, upper - delta, upper - delta), dim),
             Vector3::new((dim - 1) as i32, (dim - 1) as i32, (dim - 1) as i32)
         );
     }
@@ -306,17 +306,17 @@ mod tests {
         let bound = (SCALE / 2.0) - 0.0001;
 
         assert_eq!(
-            get_closest_octree(&Vector3::new(-bound, -bound, -bound), dim),
+            get_enclosed_octree(&Vector3::new(-bound, -bound, -bound), dim),
             Vector3::new(0, 0, 0)
         );
 
         assert_eq!(
-            get_closest_octree(&Vector3::new(0.0, 0.0, 0.0), dim),
+            get_enclosed_octree(&Vector3::new(0.0, 0.0, 0.0), dim),
             Vector3::new(0, 0, 0)
         );
 
         assert_eq!(
-            get_closest_octree(&Vector3::new(bound, bound, bound), dim),
+            get_enclosed_octree(&Vector3::new(bound, bound, bound), dim),
             Vector3::new(0, 0, 0)
         );
     }

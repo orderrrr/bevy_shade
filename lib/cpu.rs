@@ -1,9 +1,58 @@
+use std::{fs::File, io::Read};
+
 use cgmath::{vec2, vec3, Array, InnerSpace, Vector2, Vector3};
 
-use bevy_shade_lib::testing::basics::castf2;
+use bevy_shade_lib::{
+    shaders::{octree::settings_plugin::OCTreeSettings, OCTree, Voxel},
+    testing::basics::{castf2, get_enclosed_octree},
+};
 
 const RESOLUTION: u32 = 240;
 const MAX_DEPTH: u32 = 3;
+const SETTINGS: OCTreeSettings = OCTreeSettings {
+    depth: 2,
+    scale: 2.0,
+};
+
+// fn get_dist_for_dim(rp: vec3<f32>, rd: vec3<f32>, i: u32) -> f32 {
+//     var dist = settings.scale;
+//
+//     let d = 1u << i;
+//
+//     var gp = get_enclosed_octree(rp, d, settings.scale); // grid position
+//     var gpu = vec3<u32>(gp);
+//
+//     var ngp = get_next_octree_pos(rp, rd, i, settings.scale);
+//     var ngpu = vec3<u32>(ngp);
+//
+//     let index = count_octrees_below(i, settings.depth) + get_unique_index_for_dim(gpu, i);
+//     let octree = octrees[index];
+//
+//     if octree.mask > 0u {
+//
+//         dist = get_distance_to_next_octree(gpu, rp, i, settings.scale);
+//     }
+//
+//     if !(octree.mask > 0u) {
+//
+//         dist = get_distance_to_next_octree(ngpu, rp, i, settings.scale);
+//     }
+//
+//     return dist;
+// }
+fn get_dist_for_dim(rp: Vector3<f32>, rd: Vector3<f32>, i: u32) -> f32 {
+
+    let d = 1 << i;
+    let dist = SETTINGS.scale;
+
+    let gp = get_enclosed_octree(&rp, d);
+
+
+
+
+
+    dist
+}
 
 // fn distance_to_octree(rp: vec3<f32>, rd: vec3<f32>, dim: u32) -> f32 {
 //
@@ -29,6 +78,13 @@ const MAX_DEPTH: u32 = 3;
 //     return dist;
 // }
 fn closest_octree(rp: Vector3<f32>, rd: Vector3<f32>, dim: &mut u32) -> f32 {
+
+    let dist = SETTINGS.scale;
+
+
+
+
+
     rp.dot(rp).sqrt() - 0.5
 }
 
@@ -141,7 +197,7 @@ fn render(ro: Vector3<f32>, rd: Vector3<f32>) -> Vector3<f32> {
     vec3(0.0, 0.0, 0.0)
 }
 
-fn fragment(pos: Vector2<u32>) -> Vector3<f32> {
+fn fragment(pos: Vector2<u32>, voxel: &Vec<Voxel>, octree: &Vec<OCTree>) -> Vector3<f32> {
     // custom uv, not quite the same as in.uv.
     let r = Vector2::new(RESOLUTION as f32, RESOLUTION as f32);
     let uv: Vector2<f32> = ((castf2(&pos) * 2.) - r) / r.y;
@@ -163,6 +219,22 @@ fn fragment(pos: Vector2<u32>) -> Vector3<f32> {
 fn main() {
     println!("P3\n{} {}\n255", RESOLUTION, RESOLUTION);
 
+    let voxels: Vec<Voxel> = {
+        let mut voxels_file = File::open("voxels.json").unwrap();
+        let mut slice: Vec<u8> = vec![];
+        let _ = voxels_file.read_to_end(&mut slice);
+
+        serde_json::from_slice(&slice).unwrap()
+    };
+
+    let octrees: Vec<OCTree> = {
+        let mut voxels_file = File::open("octrees.json").unwrap();
+        let mut slice: Vec<u8> = vec![];
+        let _ = voxels_file.read_to_end(&mut slice);
+
+        serde_json::from_slice(&slice).unwrap()
+    };
+
     (0..RESOLUTION)
         .into_iter()
         .map(|x| {
@@ -171,7 +243,7 @@ fn main() {
                 .map(move |y| Vector2::new(x.clone(), y.clone()))
         })
         .flatten()
-        .map(fragment)
+        .map(|pos| fragment(pos, &voxels, &octrees))
         .for_each(|col| {
             let ir = (255.99 * col.x) as u8;
             let ig = (255.99 * col.y) as u8;
