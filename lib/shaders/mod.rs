@@ -27,8 +27,8 @@ pub mod octree;
     Deserialize,
 )]
 pub struct Voxel {
-    col: u32, // TODO - 64 bit colors.
-    mat: u32, // TODO, maybe multiple mats here.
+    pub col: u32, // TODO - 64 bit colors.
+    pub mat: u32, // TODO, maybe multiple mats here.
 }
 
 #[repr(C)]
@@ -48,5 +48,5 @@ pub struct Voxel {
     Deserialize,
 )]
 pub struct OCTree {
-    mask: u32,
+    pub mask: u32,
 }

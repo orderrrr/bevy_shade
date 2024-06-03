@@ -1,26 +1,26 @@
-use cgmath::{Vector2, Vector3};
+use glam::{IVec3, UVec3, Vec3};
 
 const SCALE: f32 = 10.0;
 
 #[allow(dead_code)]
-pub fn get_child_pos(parent_pos: &Vector3<u32>, child_rel_pos: &Vector3<u32>) -> Vector3<u32> {
-    parent_pos * 2 + child_rel_pos
+pub fn get_child_pos(parent_pos: &UVec3, child_rel_pos: &UVec3) -> UVec3 {
+    *parent_pos * 2 + *child_rel_pos
 }
 
 #[allow(dead_code)]
-pub fn get_unique_index(pos: &Vector3<u32>, i: u32) -> u32 {
+pub fn get_unique_index(pos: &UVec3, i: u32) -> u32 {
     let d = 1 << i;
     pos.x + pos.y * d + pos.z * d * d
 }
 
 #[allow(dead_code)]
-pub fn get_pos_from_grid_pos(pos: &Vector3<u32>, i: u32) -> Vector3<f32> {
+pub fn get_pos_from_grid_pos(pos: &UVec3, i: u32) -> Vec3 {
     let s = SCALE as f32;
     let d = (1 << i) as f32;
     let scale: f32 = s / d;
     let offset: f32 = if i == 0 { 0.0 } else { scale * 0.5 };
 
-    return (pos.cast::<f32>().unwrap() * offset) - Vector3::new(offset, offset, offset);
+    return (pos.as_vec3() * offset) - offset;
 }
 
 #[allow(dead_code)]
@@ -29,41 +29,17 @@ pub fn count_octrees_below(cd: u32, i: u32) -> u32 {
 }
 
 #[allow(dead_code)]
-pub fn get_enclosed_octree(point: &Vector3<f32>, dim: usize) -> Vector3<i32> {
-
+pub fn get_enclosed_octree(point: &Vec3, dim: usize) -> IVec3 {
     let offset = SCALE / 2.0;
-    let point = point + Vector3::new(offset, offset, offset);
+    let point = *point + offset;
 
     // Adjust point to fit within the range and scale by the dimension
     let scale = SCALE / dim as f32;
     let scaled_point = point / scale;
 
-    // Use floor to map to the correct grid cell
-    let grid_x = scaled_point.x.floor() as i32;
-    let grid_y = scaled_point.y.floor() as i32;
-    let grid_z = scaled_point.z.floor() as i32;
+    let test = scaled_point.floor().as_ivec3();
 
-    Vector3::new(grid_x, grid_y, grid_z)
-}
-
-pub fn casti(v: &Vector3<f32>) -> Vector3<i32> {
-    return Vector3::new(v.x as i32, v.y as i32, v.z as i32);
-}
-
-pub fn castf(v: &Vector3<u32>) -> Vector3<f32> {
-    return Vector3::new(v.x as f32, v.y as f32, v.z as f32);
-}
-
-pub fn castf2(v: &Vector2<u32>) -> Vector2<f32> {
-    return Vector2::new(v.x as f32, v.y as f32);
-}
-
-pub fn floor(vector: Vector3<f32>) -> Vector3<f32> {
-    Vector3::new(vector.x.floor(), vector.y.floor(), vector.z.floor())
-}
-
-pub fn ceil(vector: Vector3<f32>) -> Vector3<f32> {
-    Vector3::new(vector.x.ceil(), vector.y.ceil(), vector.z.ceil())
+    test
 }
 
 #[cfg(test)]
@@ -80,11 +56,11 @@ mod tests {
         for parent_x in 0..1 << parent_depth {
             for parent_y in 0..1 << parent_depth {
                 for parent_z in 0..1 << parent_depth {
-                    let parent_pos = Vector3::new(parent_x, parent_y, parent_z);
+                    let parent_pos = UVec3::new(parent_x, parent_y, parent_z);
                     for child_x in 0..2 {
                         for child_y in 0..2 {
                             for child_z in 0..2 {
-                                let child_rel_pos = Vector3::new(child_x, child_y, child_z);
+                                let child_rel_pos = UVec3::new(child_x, child_y, child_z);
                                 let child_pos = get_child_pos(&parent_pos, &child_rel_pos);
 
                                 assert!(child_pos.x < (1 << (parent_depth + 1)));
@@ -111,11 +87,11 @@ mod tests {
         for parent_x in 0..1 << parent_depth {
             for parent_y in 0..1 << parent_depth {
                 for parent_z in 0..1 << parent_depth {
-                    let parent_pos = Vector3::new(parent_x, parent_y, parent_z);
+                    let parent_pos = UVec3::new(parent_x, parent_y, parent_z);
                     for child_x in 0..2 {
                         for child_y in 0..2 {
                             for child_z in 0..2 {
-                                let child_rel_pos = Vector3::new(child_x, child_y, child_z);
+                                let child_rel_pos = UVec3::new(child_x, child_y, child_z);
                                 let child_pos = get_child_pos(&parent_pos, &child_rel_pos);
 
                                 assert!(child_pos.x < (1 << (parent_depth + 1)));
@@ -149,7 +125,7 @@ mod tests {
             for parent_x in 0..1 << parent_depth {
                 for parent_y in 0..1 << parent_depth {
                     for parent_z in 0..1 << parent_depth {
-                        let parent_pos = Vector3::new(parent_x, parent_y, parent_z);
+                        let parent_pos = UVec3::new(parent_x, parent_y, parent_z);
 
                         assert!(parent_pos.x < (1 << (parent_depth)));
                         assert!(parent_pos.y < (1 << (parent_depth)));
@@ -179,16 +155,16 @@ mod tests {
         for parent_x in 0..1 << parent_depth {
             for parent_y in 0..1 << parent_depth {
                 for parent_z in 0..1 << parent_depth {
-                    let parent_pos = Vector3::new(parent_x, parent_y, parent_z);
+                    let parent_pos = UVec3::new(parent_x, parent_y, parent_z);
                     for child_x in 0..2 {
                         for child_y in 0..2 {
                             for child_z in 0..2 {
-                                let child_rel_pos = Vector3::new(child_x, child_y, child_z);
+                                let child_rel_pos = UVec3::new(child_x, child_y, child_z);
                                 let child_pos = get_child_pos(&parent_pos, &child_rel_pos);
 
                                 let pos = get_pos_from_grid_pos(&child_pos, parent_depth + 1);
 
-                                let max_width: f32 = (SCALE / (1 << parent_depth + 1) as f32);
+                                let max_width: f32 = SCALE / (1 << parent_depth + 1) as f32;
                                 let min_scale = (SCALE as f32 / 2.0) as f32 - (max_width / 2.0);
 
                                 println!("pos: {:?}, cpos: {:?}", pos, child_pos);
@@ -270,7 +246,6 @@ mod tests {
         assert_eq_print(calculate_max_voxel(2), 512);
     }
 
-    
     fn test_closest(dim: usize) {
         let lower = -(SCALE / 2.0);
         let upper = SCALE / 2.0;
@@ -279,18 +254,18 @@ mod tests {
         let half_dim = (dim as i32 / 2) as f32;
 
         assert_eq!(
-            get_enclosed_octree(&Vector3::new(lower + delta, lower + delta, lower + delta), dim),
-            Vector3::new(0, 0, 0)
+            get_enclosed_octree(&Vec3::new(lower + delta, lower + delta, lower + delta), dim),
+            IVec3::new(0, 0, 0)
         );
 
         assert_eq!(
-            get_enclosed_octree(&Vector3::new(0.0, 0.0, 0.0), dim),
-            Vector3::new(half_dim as i32, half_dim as i32, half_dim as i32)
+            get_enclosed_octree(&Vec3::new(0.0, 0.0, 0.0), dim),
+            IVec3::new(half_dim as i32, half_dim as i32, half_dim as i32)
         );
 
         assert_eq!(
-            get_enclosed_octree(&Vector3::new(upper - delta, upper - delta, upper - delta), dim),
-            Vector3::new((dim - 1) as i32, (dim - 1) as i32, (dim - 1) as i32)
+            get_enclosed_octree(&Vec3::new(upper - delta, upper - delta, upper - delta), dim),
+            IVec3::new((dim - 1) as i32, (dim - 1) as i32, (dim - 1) as i32)
         );
     }
 
@@ -306,19 +281,18 @@ mod tests {
         let bound = (SCALE / 2.0) - 0.0001;
 
         assert_eq!(
-            get_enclosed_octree(&Vector3::new(-bound, -bound, -bound), dim),
-            Vector3::new(0, 0, 0)
+            get_enclosed_octree(&Vec3::new(-bound, -bound, -bound), dim),
+            IVec3::new(0, 0, 0)
         );
 
         assert_eq!(
-            get_enclosed_octree(&Vector3::new(0.0, 0.0, 0.0), dim),
-            Vector3::new(0, 0, 0)
+            get_enclosed_octree(&Vec3::new(0.0, 0.0, 0.0), dim),
+            IVec3::new(0, 0, 0)
         );
 
         assert_eq!(
-            get_enclosed_octree(&Vector3::new(bound, bound, bound), dim),
-            Vector3::new(0, 0, 0)
+            get_enclosed_octree(&Vec3::new(bound, bound, bound), dim),
+            IVec3::new(0, 0, 0)
         );
     }
 }
-

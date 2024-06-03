@@ -1,11 +1,10 @@
 use std::{fs::File, io::Read};
 
-use cgmath::{vec2, vec3, Array, InnerSpace, Vector2, Vector3};
-
 use bevy_shade_lib::{
     shaders::{octree::settings_plugin::OCTreeSettings, OCTree, Voxel},
-    testing::basics::{castf2, get_enclosed_octree},
+    testing::basics::{count_octrees_below, get_enclosed_octree, get_unique_index},
 };
+use glam::{vec2, vec3, IVec3, UVec2, UVec3, Vec2, Vec3};
 
 const RESOLUTION: u32 = 240;
 const MAX_DEPTH: u32 = 3;
@@ -13,6 +12,77 @@ const SETTINGS: OCTreeSettings = OCTreeSettings {
     depth: 2,
     scale: 2.0,
 };
+
+// fn cube(p: vec3<f32>, d: vec3<f32>) -> f32 {
+//     let q = abs(p) - d;
+//     return length(max(q, vec3(0.0))) + min(max(q.x, max(q.y, q.z)), 0.);
+// }
+fn cube(p: Vec3, d: Vec3) -> f32 {
+    let q = p.abs() - d;
+    // return length(max(q, vec3(0.0))) + min(max(q.x, max(q.y, q.z)), 0.);
+    (q.max(Vec3::splat(0.0))).length() + q.x.max(q.y.max(q.z)).min(0.)
+}
+
+// fn get_dist(pos: vec3<f32>, i: u32) -> f32 {
+//
+//     return cube(pos, vec3((settings.scale / f32(1u << i)) / 2.0));
+// }
+fn get_dist(pos: Vec3, i: u32) -> f32 {
+    cube(pos, Vec3::splat((SETTINGS.scale / (1 << i) as f32) / 2.0))
+}
+
+// fn calc_pos_from_invoc_id(indices: vec3<u32>, i: u32, scale: f32) -> vec3<f32> {
+//     let d = 1u << i;
+//     let size: f32 = scale / f32(d);
+//
+//     let center = (vec3<f32>(indices) + 0.5) * size - (scale / 2.0);
+//
+//     return center;
+// }
+fn calc_pos_from_invoc_id(indices: UVec3, i: u32, scale: f32) -> Vec3 {
+    let d = 1 << i;
+    let size = scale / d as f32;
+    (indices.as_vec3() + 0.5) * size - (scale / 2.)
+}
+
+// fn get_distance_to_next_octree(gp: vec3<u32>, rp: vec3<f32>, i: u32, scale: f32) -> f32 {
+//
+//     let index = count_octrees_below(i, settings.depth) + get_unique_index_for_dim(gp, i);
+//     let octree = octrees[index];
+//     let pos = calc_pos_from_invoc_id(gp, i, settings.scale);
+//
+//     // get the distance from the old position to the next octree
+//     return get_dist(rp - pos, i);
+// }
+fn get_distance_to_next_octree(
+    gp: UVec3,
+    rp: Vec3,
+    i: u32,
+    scale: f32,
+    _voxels: &Vec<Voxel>,
+    _octrees: &Vec<OCTree>,
+) -> f32 {
+    // let index = count_octrees_below(i, SETTINGS.depth) + get_unique_index(&gp, i);
+    let pos = calc_pos_from_invoc_id(gp, i, scale);
+    get_dist(rp - pos, i)
+}
+
+// fn get_next_octree_pos(rp: vec3<f32>, rd: vec3<f32>, i: u32, scale: f32) -> vec3<i32> {
+//
+//     let d = 1u << i;
+//
+//     // normalize the rd and multiply by the size of the current dim voxel, putting us somewhere inside the next grid
+//     let np = rp + (normalize(rd) * (scale / f32(d)));
+//
+//     // get the next octree in that position.
+//     return get_enclosed_octree(np, d, settings.scale); // grid position
+// }
+fn get_next_octree_pos(rp: Vec3, rd: Vec3, i: u32, scale: f32) -> IVec3 {
+    let d = 1 << i;
+    let np = rp + (rd * (scale / d as f32));
+
+    get_enclosed_octree(&np, d)
+}
 
 // fn get_dist_for_dim(rp: vec3<f32>, rd: vec3<f32>, i: u32) -> f32 {
 //     var dist = settings.scale;
@@ -40,18 +110,43 @@ const SETTINGS: OCTreeSettings = OCTreeSettings {
 //
 //     return dist;
 // }
-fn get_dist_for_dim(rp: Vector3<f32>, rd: Vector3<f32>, i: u32) -> f32 {
+fn get_dist_for_dim(rp: Vec3, rd: Vec3, i: u32, voxels: &Vec<Voxel>, octrees: &Vec<OCTree>) -> f32 {
+    eprintln!("i: {}", i);
 
     let d = 1 << i;
-    let dist = SETTINGS.scale;
+    let mut dist = SETTINGS.scale;
 
     let gp = get_enclosed_octree(&rp, d);
+    let gpu = gp.max(IVec3::splat(0)).as_uvec3();
 
+    let ngp = get_next_octree_pos(rp, rd, i, SETTINGS.scale);
+    let ngpu = ngp.max(IVec3::splat(0)).as_uvec3();
 
+    let index = count_octrees_below(i, SETTINGS.depth) + get_unique_index(&gpu, i);
+    let octree = octrees[index as usize];
 
+    if octree.mask > 0 && valid_octree_pos(gp, i) {
+        dist = get_distance_to_next_octree(gpu, rp, i, SETTINGS.scale, voxels, octrees);
+    }
 
+    if !octree.mask > 0 && valid_octree_pos(ngp, i) {
+        dist = get_distance_to_next_octree(ngpu, rp, i, SETTINGS.scale, voxels, octrees)
+    }
 
     dist
+}
+
+// // currently we only have one octree, i would like to have multiple but for now assuming only one.
+// fn valid_octree_pos(gp: vec3<i32>, i: u32) -> bool {
+//
+//     // make sure it is within the octree bounds.
+//     return
+//         gp.x > -1 && gp.y > -1 && gp.z > -1 && gp.x < i32((1u << i) - 1) && gp.y < i32((1u << i) - 1) && gp.z < i32((1u << i) - 1);
+// }
+fn valid_octree_pos(gp: IVec3, i: u32) -> bool {
+
+    let d = 1 << i;
+    gp.x > -1 && gp.y > -1 && gp.z > -1 && gp.x < d && gp.y < d && gp.z < d 
 }
 
 // fn distance_to_octree(rp: vec3<f32>, rd: vec3<f32>, dim: u32) -> f32 {
@@ -77,15 +172,28 @@ fn get_dist_for_dim(rp: Vector3<f32>, rd: Vector3<f32>, i: u32) -> f32 {
 //
 //     return dist;
 // }
-fn closest_octree(rp: Vector3<f32>, rd: Vector3<f32>, dim: &mut u32) -> f32 {
+fn closest_octree(
+    rp: Vec3,
+    rd: Vec3,
+    dim: &mut u32,
+    voxel: &Vec<Voxel>,
+    octree: &Vec<OCTree>,
+) -> f32 {
+    let i = dim;
+    let mut dist = get_dist_for_dim(rp, rd, *i, voxel, octree);
 
-    let dist = SETTINGS.scale;
+    if dist < 0.001 {
+        while dist < 0.001 && *i <= SETTINGS.depth {
+            *i += 1;
+            dist = get_dist_for_dim(rp, rd, *i, voxel, octree);
+        }
 
+        // if dist < 0.001 {
+        //     dist = get_dist_for_voxels(rp, rd);
+        // }
+    }
 
-
-
-
-    rp.dot(rp).sqrt() - 0.5
+    dist
 }
 
 // fn cast_ray(ro: vec3<f32>, rd: vec3<f32>) -> f32 {
@@ -116,14 +224,14 @@ fn closest_octree(rp: Vector3<f32>, rd: Vector3<f32>, dim: &mut u32) -> f32 {
 //     return t;
 // }
 
-pub fn cast_ray(ro: Vector3<f32>, rd: Vector3<f32>) -> f32 {
+pub fn cast_ray(ro: Vec3, rd: Vec3, voxel: &Vec<Voxel>, octree: &Vec<OCTree>) -> f32 {
     let mut t = 0.0;
     let mut depth = 0;
 
     for _ in 0..200 {
         let pos = ro + t * rd;
 
-        let d = closest_octree(pos, rd, &mut depth);
+        let d = closest_octree(pos, rd, &mut depth, voxel, octree);
 
         // if d < 0.001 && depth < MAX_DEPTH {
         //
@@ -147,17 +255,50 @@ pub fn cast_ray(ro: Vector3<f32>, rd: Vector3<f32>) -> f32 {
     t
 }
 
-fn calc_normal(pos: Vector3<f32>) -> Vector3<f32> {
+fn calc_normal(pos: Vec3, voxel: &Vec<Voxel>, octree: &Vec<OCTree>) -> Vec3 {
     let e = vec2(0.0001, 0.0);
     let mut d = MAX_DEPTH;
 
     return (vec3(
-        closest_octree(pos + vec3(e.x, e.y, e.y), vec3(0.0, 0.0, 0.0), &mut d)
-            - closest_octree(pos - vec3(e.x, e.y, e.y), vec3(0.0, 0.0, 0.0), &mut d),
-        closest_octree(pos + vec3(e.y, e.x, e.y), vec3(0.0, 0.0, 0.0), &mut d)
-            - closest_octree(pos - vec3(e.y, e.x, e.y), vec3(0.0, 0.0, 0.0), &mut d),
-        closest_octree(pos + vec3(e.y, e.y, e.x), vec3(0.0, 0.0, 0.0), &mut d)
-            - closest_octree(pos - vec3(e.y, e.y, e.x), vec3(0.0, 0.0, 0.0), &mut d),
+        closest_octree(
+            pos + vec3(e.x, e.y, e.y),
+            vec3(0.0, 0.0, 0.0),
+            &mut d,
+            voxel,
+            octree,
+        ) - closest_octree(
+            pos - vec3(e.x, e.y, e.y),
+            vec3(0.0, 0.0, 0.0),
+            &mut d,
+            voxel,
+            octree,
+        ),
+        closest_octree(
+            pos + vec3(e.y, e.x, e.y),
+            vec3(0.0, 0.0, 0.0),
+            &mut d,
+            voxel,
+            octree,
+        ) - closest_octree(
+            pos - vec3(e.y, e.x, e.y),
+            vec3(0.0, 0.0, 0.0),
+            &mut d,
+            voxel,
+            octree,
+        ),
+        closest_octree(
+            pos + vec3(e.y, e.y, e.x),
+            vec3(0.0, 0.0, 0.0),
+            &mut d,
+            voxel,
+            octree,
+        ) - closest_octree(
+            pos - vec3(e.y, e.y, e.x),
+            vec3(0.0, 0.0, 0.0),
+            &mut d,
+            voxel,
+            octree,
+        ),
     ))
     .normalize();
 }
@@ -186,34 +327,34 @@ fn calc_normal(pos: Vector3<f32>) -> Vector3<f32> {
 //         *col += mate * vec3(1., 0.4, 0.3) * bou_dif;
 //     }
 // }
-fn render(ro: Vector3<f32>, rd: Vector3<f32>) -> Vector3<f32> {
-    let t = cast_ray(ro, rd);
+fn render(ro: Vec3, rd: Vec3, voxel: &Vec<Voxel>, octree: &Vec<OCTree>) -> Vec3 {
+    let t = cast_ray(ro, rd, voxel, octree);
 
     if t > 0. {
         let pos = ro + t * rd;
-        return calc_normal(pos);
+        return calc_normal(pos, voxel, octree);
     }
 
-    vec3(0.0, 0.0, 0.0)
+    Vec3::new(0.0, 0.0, 0.0)
 }
 
-fn fragment(pos: Vector2<u32>, voxel: &Vec<Voxel>, octree: &Vec<OCTree>) -> Vector3<f32> {
+fn fragment(pos: UVec2, voxel: &Vec<Voxel>, octree: &Vec<OCTree>) -> Vec3 {
     // custom uv, not quite the same as in.uv.
-    let r = Vector2::new(RESOLUTION as f32, RESOLUTION as f32);
-    let uv: Vector2<f32> = ((castf2(&pos) * 2.) - r) / r.y;
+    let r = Vec2::new(RESOLUTION as f32, RESOLUTION as f32);
+    let uv: Vec2 = ((pos.as_vec2() * 2.) - r) / r.y;
 
     // rotation around 0.,,
-    let ro = vec3(0.0, 0.0, -2.);
+    let ro = Vec3::new(0.0, 0.0, -2.);
 
     // todo convert this from linear algebra rotation to geometric algebra.
-    let ta = vec3(0., 0., 0.);
+    let ta = Vec3::new(0., 0., 0.);
     let ww = (ta - ro).normalize();
-    let uu = (ww.cross(vec3(0.0, 1.0, 0.0))).normalize();
+    let uu = (ww.cross(Vec3::new(0.0, 1.0, 0.0))).normalize();
     let vv = (uu.cross(ww)).normalize();
 
-    let rd: Vector3<f32> = (uv.x * uu + uv.y * vv + 2.0 * ww).normalize();
+    let rd: Vec3 = (uv.x * uu + uv.y * vv + 2.0 * ww).normalize();
 
-    render(ro, rd)
+    render(ro, rd, voxel, octree)
 }
 
 fn main() {
@@ -240,7 +381,7 @@ fn main() {
         .map(|x| {
             (0..RESOLUTION)
                 .into_iter()
-                .map(move |y| Vector2::new(x.clone(), y.clone()))
+                .map(move |y| UVec2::new(x.clone(), y.clone()))
         })
         .flatten()
         .map(|pos| fragment(pos, &voxels, &octrees))
