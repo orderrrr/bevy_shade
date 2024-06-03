@@ -14,8 +14,8 @@ pub fn get_unique_index(pos: &UVec3, i: u32) -> u32 {
 }
 
 #[allow(dead_code)]
-pub fn get_pos_from_grid_pos(pos: &UVec3, i: u32) -> Vec3 {
-    let s = SCALE as f32;
+pub fn get_pos_from_grid_pos(pos: &UVec3, i: u32, scale: f32) -> Vec3 {
+    let s = scale as f32;
     let d = (1 << i) as f32;
     let scale: f32 = s / d;
     let offset: f32 = if i == 0 { 0.0 } else { scale * 0.5 };
@@ -29,15 +29,20 @@ pub fn count_octrees_below(cd: u32, i: u32) -> u32 {
 }
 
 #[allow(dead_code)]
-pub fn get_enclosed_octree(point: &Vec3, dim: usize) -> IVec3 {
-    let offset = SCALE / 2.0;
+pub fn get_enclosed_octree(point: &Vec3, dim: usize, scale: f32) -> IVec3 {
+    let offset = scale / 2.0;
     let point = *point + offset;
 
     // Adjust point to fit within the range and scale by the dimension
-    let scale = SCALE / dim as f32;
+    let scale = scale / dim as f32;
     let scaled_point = point / scale;
 
     let test = scaled_point.floor().as_ivec3();
+
+    // eprintln!(
+    //     "point: {}, test: {}, spoint: {}, scale: {}",
+    //     point, test, scaled_point, scale
+    // );
 
     test
 }
@@ -162,7 +167,8 @@ mod tests {
                                 let child_rel_pos = UVec3::new(child_x, child_y, child_z);
                                 let child_pos = get_child_pos(&parent_pos, &child_rel_pos);
 
-                                let pos = get_pos_from_grid_pos(&child_pos, parent_depth + 1);
+                                let pos =
+                                    get_pos_from_grid_pos(&child_pos, parent_depth + 1, SCALE);
 
                                 let max_width: f32 = SCALE / (1 << parent_depth + 1) as f32;
                                 let min_scale = (SCALE as f32 / 2.0) as f32 - (max_width / 2.0);
@@ -254,17 +260,25 @@ mod tests {
         let half_dim = (dim as i32 / 2) as f32;
 
         assert_eq!(
-            get_enclosed_octree(&Vec3::new(lower + delta, lower + delta, lower + delta), dim),
+            get_enclosed_octree(
+                &Vec3::new(lower + delta, lower + delta, lower + delta),
+                dim,
+                SCALE
+            ),
             IVec3::new(0, 0, 0)
         );
 
         assert_eq!(
-            get_enclosed_octree(&Vec3::new(0.0, 0.0, 0.0), dim),
+            get_enclosed_octree(&Vec3::new(0.0, 0.0, 0.0), dim, SCALE),
             IVec3::new(half_dim as i32, half_dim as i32, half_dim as i32)
         );
 
         assert_eq!(
-            get_enclosed_octree(&Vec3::new(upper - delta, upper - delta, upper - delta), dim),
+            get_enclosed_octree(
+                &Vec3::new(upper - delta, upper - delta, upper - delta),
+                dim,
+                SCALE
+            ),
             IVec3::new((dim - 1) as i32, (dim - 1) as i32, (dim - 1) as i32)
         );
     }
@@ -281,17 +295,17 @@ mod tests {
         let bound = (SCALE / 2.0) - 0.0001;
 
         assert_eq!(
-            get_enclosed_octree(&Vec3::new(-bound, -bound, -bound), dim),
+            get_enclosed_octree(&Vec3::new(-bound, -bound, -bound), dim, SCALE),
             IVec3::new(0, 0, 0)
         );
 
         assert_eq!(
-            get_enclosed_octree(&Vec3::new(0.0, 0.0, 0.0), dim),
+            get_enclosed_octree(&Vec3::new(0.0, 0.0, 0.0), dim, SCALE),
             IVec3::new(0, 0, 0)
         );
 
         assert_eq!(
-            get_enclosed_octree(&Vec3::new(bound, bound, bound), dim),
+            get_enclosed_octree(&Vec3::new(bound, bound, bound), dim, SCALE),
             IVec3::new(0, 0, 0)
         );
     }
