@@ -80,12 +80,13 @@ pub fn get_current_octree_dist(
     voxels: &Vec<Voxel>,
     octrees: &Vec<OCTree>,
 ) -> f32 {
-    let d = 1 << i;
-
     //First we need to check if the octree we are currently in is empty.
-    let gp = get_enclosed_octree(&rp, d, SETTINGS.scale);
+    // let gp = get_enclosed_octree(&rp, d, SETTINGS.scale);
+    let gp = IVec3::splat(0);
 
     let dist = get_distance_to_next_octree(gp, rp, i, SETTINGS.scale, voxels, octrees);
+    // return cube(rp, Vec3::splat(SETTINGS.scale / (1 << i) as f32 / 2.0));
+    // return rp.length() - 1.0;
     return dist;
 }
 
@@ -99,6 +100,7 @@ pub fn get_dist_for_dim(
     let d = 1 << i;
 
     //First we need to check if the octree we are currently in is empty.
+    // let gp = IVec3::splat(0);
     let gp = get_enclosed_octree(&rp, d, SETTINGS.scale);
     let gpu = gp.max(IVec3::splat(0)).as_uvec3();
 
@@ -167,6 +169,7 @@ pub fn cast_ray(ro: Vec3, rd: Vec3, voxel: &Vec<Voxel>, octree: &Vec<OCTree>) ->
         let pos = ro + t * rd;
 
         let d = closest_octree(pos, rd, &mut depth, voxel, octree);
+        // let d = get_current_octree_dist(pos, 0, voxel, octree);
 
         // if d < 0.001 && depth < MAX_DEPTH {
         //
@@ -197,10 +200,8 @@ pub fn calc_normal(pos: Vec3, voxel: &Vec<Voxel>, octree: &Vec<OCTree>) -> Vec3 
     return (vec3(
         get_current_octree_dist(pos + e.xyy(), d, voxel, octree)
             - get_current_octree_dist(pos - e.xyy(), d, voxel, octree),
-
         get_current_octree_dist(pos + e.yxy(), d, voxel, octree)
             - get_current_octree_dist(pos - e.yxy(), d, voxel, octree),
-
         get_current_octree_dist(pos + e.yyx(), d, voxel, octree)
             - get_current_octree_dist(pos - e.yyx(), d, voxel, octree),
     ))
@@ -211,7 +212,7 @@ pub fn render(ro: Vec3, rd: Vec3, voxel: &Vec<Voxel>, octree: &Vec<OCTree>) -> V
     let t = cast_ray(ro, rd, voxel, octree);
 
     if t > 0. {
-        let pos = ro + ((t - 0.1) * rd);
+        let pos = ro + (t * rd);
         return calc_normal(pos, voxel, octree);
     }
 
@@ -220,13 +221,13 @@ pub fn render(ro: Vec3, rd: Vec3, voxel: &Vec<Voxel>, octree: &Vec<OCTree>) -> V
 
 pub fn fragment(pos: UVec2, voxel: &Vec<Voxel>, octree: &Vec<OCTree>) -> Vec3 {
     // custom uv, not quite the same as in.uv.
-    let r = Vec2::new(RESOLUTION as f32, RESOLUTION as f32);
-    let uv: Vec2 = ((pos.as_vec2() * 2.) - r) / r.y;
+    let r = Vec2::splat(RESOLUTION as f32);
+    let mut uv: Vec2 = ((pos.as_vec2() * 2.) - r) / r.y;
 
-    let t = 5.;
+    let t = 7.;
 
     // rotation around 0.,,
-    let ro = Vec3::new(5. * f32::sin(t), 5. * f32::cos(t), 0.);
+    let ro = Vec3::new(5. * f32::sin(t), 5. * f32::cos(t), 2.);
 
     // todo convert this from linear algebra rotation to geometric algebra.
     let ta = Vec3::new(0., 0., 0.);
@@ -310,11 +311,10 @@ mod ray_test {
         let uv = Vec2::splat(0.0);
 
         // setup rotation
-        let t = 2.0;
+        let t = 7.;
 
         // rotation around 0.,,
-        // let ro = Vec3::new(0., 0., 5.);
-        let ro = Vec3::new(5. * f32::sin(t), 5. * f32::cos(t), 0.);
+        let ro = Vec3::new(5. * f32::sin(t), 5. * f32::cos(t), 2.);
 
         // todo convert this from linear algebra rotation to geometric algebra.
         let ta = Vec3::new(0., 0., 0.);
