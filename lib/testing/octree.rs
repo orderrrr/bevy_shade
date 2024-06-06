@@ -181,13 +181,16 @@ pub fn cast_ray(ro: Vec3, rd: Vec3, voxel: &Vec<Voxel>, octree: &Vec<OCTree>) ->
 
         let d = closest_octree(pos, rd, &mut depth, voxel, octree);
 
+        // let d = get_current_octree_dist(pos, 0, voxel, octree);
+
         //eprintln!("d: {}", d);
 
         // if d < 0.001 && depth < MAX_DEPTH {
         //
         // }
 
-        if d < 0.001 && depth > 0 {
+        // if d < 0.001 && depth > 0 {
+        if d < 0.001 {
             break;
         }
 
@@ -198,7 +201,7 @@ pub fn cast_ray(ro: Vec3, rd: Vec3, voxel: &Vec<Voxel>, octree: &Vec<OCTree>) ->
         }
     }
 
-    if t > 20. || depth == 0 {
+    if t > 20. {
         t = -1.;
     }
 
@@ -234,13 +237,14 @@ pub fn render(ro: Vec3, rd: Vec3, voxel: &Vec<Voxel>, octree: &Vec<OCTree>) -> V
 pub fn fragment(pos: UVec2, voxel: &Vec<Voxel>, octree: &Vec<OCTree>) -> Vec3 {
     // custom uv, not quite the same as in.uv.
     let r = Vec2::splat(RESOLUTION as f32);
-    let mut uv: Vec2 = ((pos.as_vec2() * 2.) - r) / r.y;
-    uv = uv * vec2(1.0, -1.0);
+    // let uv: Vec2 = (pos.as_vec2()) / r;
+    let uv: Vec2 = ((pos.as_vec2() * 2.) - r) / r.y;
+    // uv = uv * vec2(1.0, -1.0);
 
     let t = 7.;
 
     // rotation around 0.,,
-    let ro = Vec3::new(2. * f32::sin(t), 0., 2. * f32::cos(t));
+    let ro = Vec3::new(5. * f32::sin(t), 0., 5. * f32::cos(t));
 
     // todo convert this from linear algebra rotation to geometric algebra.
     let ta = Vec3::new(0., 0., 0.);
@@ -252,13 +256,15 @@ pub fn fragment(pos: UVec2, voxel: &Vec<Voxel>, octree: &Vec<OCTree>) -> Vec3 {
 
     let render = render(ro, rd, voxel, octree);
 
-    if (pos.as_vec2() == Vec2::new(58.0, 65.0)) {
+    if pos.as_vec2() == Vec2::new(85.0, 52.0) {
         eprintln!("POS: {}", pos);
         eprintln!("UV: {}", uv);
         eprintln!("{}", render);
     }
 
-    render
+    // render
+
+    return uv.extend(0.0);
 }
 
 #[cfg(test)]
@@ -336,16 +342,16 @@ mod ray_test {
             serde_json::from_slice(&slice).unwrap()
         };
 
-        let pos = Vec2::new(58.0, 65.0);
+        let pos = Vec2::new(85.0, 52.0);
 
         // custom uv, not quite the same as in.uv.
         let r = Vec2::splat(RESOLUTION as f32);
-        let mut uv: Vec2 = ((pos * 2.) - r) / r.y;
+        let uv: Vec2 = ((pos * 2.) - r) / r.y;
 
         let t = 7.;
 
         // rotation around 0.,,
-        let ro = Vec3::new(2. * f32::sin(t), 2. * f32::cos(t), 2.);
+        let ro = Vec3::new(5. * f32::sin(t), 0., 5. * f32::cos(t));
 
         // todo convert this from linear algebra rotation to geometric algebra.
         let ta = Vec3::new(0., 0., 0.);

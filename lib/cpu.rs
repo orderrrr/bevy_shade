@@ -37,7 +37,7 @@ fn main() {
     let res: Vec<Vec3> = img
         .into_par_iter()
         .map(|pos| fragment(pos, &voxels, &octrees))
-        .rev()
+        // .rev()
         .collect();
 
     res

@@ -177,9 +177,9 @@ fn map(pos: vec3<f32>, rd: vec3<f32>) -> f32 {
     let d2 = pos.y - (-1.4);
 
     // this needs to be more friendly to the raycast.
-    let oc = distance_to_octree(pos, rd, 0u);
+    // let oc = distance_to_octree(pos, rd, 0u);
 
-    return min(oc, d2);
+    return min(d1, d2);
 }
 
 fn get_next_octree_pos(rp: vec3<f32>, rd: vec3<f32>, i: u32, scale: f32) -> vec3<i32> {
@@ -283,7 +283,7 @@ fn distance_to_octree(rp: vec3<f32>, rd: vec3<f32>, dim: u32) -> f32 {
 
     dist = get_dist_for_dim(rp, rd, i);
 
-    if (dist < 0.001) {
+    if dist < 0.001 {
 
         while dist < 0.001 && i <= settings.depth {
 
@@ -291,11 +291,11 @@ fn distance_to_octree(rp: vec3<f32>, rd: vec3<f32>, dim: u32) -> f32 {
             dist = get_dist_for_dim(rp, rd, i);
         }
 
-        if (dist < 0.001) {
+        if dist < 0.001 {
             dist = get_dist_for_voxels(rp, rd);
         }
     }
-    
+
 
     return dist;
 
