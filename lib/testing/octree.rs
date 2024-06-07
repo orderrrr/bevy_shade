@@ -36,13 +36,13 @@ pub fn get_distance_to_next_octree(
 ) -> f32 {
     // let index = count_octrees_below(i, SETTINGS.depth) + get_unique_index(&gp, i);
     let pos = calc_pos_from_invoc_id(gp, i, scale);
-    //eprintln!("rp: {}, cube_pos: {}", rp, pos);
+    eprintln!("rp: {}, cube_pos: {}", rp, pos);
     get_dist(rp - pos, i)
 }
 
 pub fn get_next_octree_pos(rp: Vec3, rd: Vec3, i: u32, scale: f32) -> IVec3 {
     let d = 1 << i;
-    let np = rp + (rd * ((scale / d as f32) / 1.0));
+    let np = rp + (rd * ((scale / d as f32) / 2.0));
 
     get_enclosed_octree(&np, d, SETTINGS.scale)
 }
@@ -58,18 +58,18 @@ pub fn move_to_edge(rp: Vec3, rd: Vec3, i: u32, offset: Vec3) -> f32 {
     let min_pos = offset + box_dims;
     let max_pos = offset - box_dims;
 
-    //eprintln!("mp: {}, mxp: {}", min_pos, max_pos);
+    eprintln!("mp: {}, mxp: {}", min_pos, max_pos);
 
-    //eprintln!("bd: {}", box_dims);
+    eprintln!("bd: {}", box_dims);
 
     let t0 = (min_pos - rp) / rd;
     let t1 = (max_pos - rp) / rd;
 
-    //eprintln!("t0: {}, t1: {}", t0, t1);
+    eprintln!("t0: {}, t1: {}", t0, t1);
 
     let t_min = t0.min(t1);
 
-    //eprintln!("t_min: {}", t_min);
+    eprintln!("t_min: {}", t_min);
 
     t_min.x.max(t_min.y.max(t_min.z)).abs()
 }
@@ -109,18 +109,21 @@ pub fn get_dist_for_dim(
     let ngp = get_next_octree_pos(rp, rd, i, SETTINGS.scale);
     let ngpu = ngp.max(IVec3::splat(0)).as_uvec3();
 
-    // eprintln!("GP: {}, RP: {}, RD: {}", gp, rp, rd);
-    // eprintln!("NGP: {}", ngp);
+    eprintln!("GP: {}, RP: {}, RD: {}", gp, rp, rd);
+    eprintln!("NGP: {}", ngp);
 
     if valid_octree_pos(gp, i) {
         let index = count_octrees_below(i, SETTINGS.depth) + get_unique_index(&gpu, i);
         let octree = octrees[index as usize];
 
         if octree.mask > 0 {
-            // eprintln!("OCTREE HAS MASK");
+            eprintln!("OCTREE HAS MASK");
             let dist = get_distance_to_next_octree(gp, rp, i, SETTINGS.scale, voxels, octrees);
-            // eprintln!("DIST: {}", dist);
-            return Vec2::new(dist, 1.0);
+            eprintln!("DIST: {}", dist);
+            if (dist < 0.001) {
+                return Vec2::new(dist, 1.0);
+            }
+            return Vec2::new(dist, 0.0);
         }
     }
 
@@ -129,19 +132,22 @@ pub fn get_dist_for_dim(
         let octree = octrees[index as usize];
 
         if octree.mask > 0 {
-            // eprintln!("OCTREE HAS MASK");
+            eprintln!("OCTREE HAS MASK");
             let dist = get_distance_to_next_octree(ngp, rp, i, SETTINGS.scale, voxels, octrees);
-            // eprintln!("DIST: {}", dist);
-            return Vec2::new(dist, 1.0);
+            eprintln!("DIST: {}", dist);
+            if (dist < 0.001) {
+                return Vec2::new(dist, 1.0);
+            }
+            return Vec2::new(dist, 0.0);
         }
     }
 
     let cube_offset = calc_pos_from_invoc_id(gp, i, SETTINGS.scale);
-    // eprintln!("cube_offset: {}", cube_offset);
+    eprintln!("cube_offset: {}", cube_offset);
     // get_dist(rp - cube_offset, i).abs()
 
     let new_pos = move_to_edge(rp, rd, i, cube_offset);
-    // eprintln!("new_pos: {}", new_pos);
+    eprintln!("new_pos: {}", new_pos);
     Vec2::new(new_pos, 0.0)
 }
 
@@ -177,13 +183,13 @@ pub fn cast_ray(ro: Vec3, rd: Vec3, voxel: &Vec<Voxel>, octree: &Vec<OCTree>) ->
     for _ in 0..300 {
         let pos = ro + t * rd;
 
-        //eprintln!("POS IN RAY: {}", pos);
+        eprintln!("POS IN RAY: {}", pos);
 
         let d = closest_octree(pos, rd, &mut depth, voxel, octree);
 
         // let d = get_current_octree_dist(pos, 0, voxel, octree);
 
-        //eprintln!("d: {}", d);
+        eprintln!("d: {}", d);
 
         // if d < 0.001 && depth < MAX_DEPTH {
         //
@@ -256,15 +262,15 @@ pub fn fragment(pos: UVec2, voxel: &Vec<Voxel>, octree: &Vec<OCTree>) -> Vec3 {
 
     let render = render(ro, rd, voxel, octree);
 
-    if pos.as_vec2() == Vec2::new(85.0, 52.0) {
+    if pos.as_vec2() == Vec2::new(57.0, 42.0) {
         eprintln!("POS: {}", pos);
         eprintln!("UV: {}", uv);
         eprintln!("{}", render);
     }
 
-    // render
+    render
 
-    return uv.extend(0.0);
+    // return uv.extend(0.0);
 }
 
 #[cfg(test)]
@@ -286,12 +292,12 @@ mod ray_test {
         for _ in 0..300 {
             let pos = ro + t * rd;
 
-            //eprintln!("POS IN RAY: {}", pos);
+            eprintln!("POS IN RAY: {}", pos);
 
             let d = closest_octree(pos, rd, &mut depth, voxel, octree);
             eprintln!("d: {}, t: {}", d, t);
 
-            //eprintln!("d: {}", d);
+            eprintln!("d: {}", d);
 
             // if d < 0.001 && depth < MAX_DEPTH {
             //
@@ -342,7 +348,7 @@ mod ray_test {
             serde_json::from_slice(&slice).unwrap()
         };
 
-        let pos = Vec2::new(85.0, 52.0);
+        let pos = Vec2::new(84.0, 52.0);
 
         // custom uv, not quite the same as in.uv.
         let r = Vec2::splat(RESOLUTION as f32);
