@@ -1,5 +1,3 @@
-use core::panic;
-
 use crate::{
     shaders::{octree::settings_plugin::OCTreeSettings, OCTree, Voxel},
     testing::basics::{count_octrees_below, get_enclosed_octree, get_unique_index},
@@ -21,15 +19,18 @@ pub fn cube(p: Vec3, d: Vec3) -> f32 {
     (q.max(Vec3::splat(0.0))).length() + q.x.max(q.y.max(q.z)).min(0.)
 }
 
+// fine
 pub fn get_dist(pos: Vec3, i: u32) -> f32 {
-    cube(pos, Vec3::splat(octree_size(i, SETTINGS.scale)) / 2.0)
+    cube(pos, Vec3::splat(octree_size(i, SETTINGS.scale) / 2.0))
 }
 
+// fine
 pub fn calc_pos_from_invoc_id(indices: IVec3, i: u32, scale: f32) -> Vec3 {
     let size = octree_size(i, SETTINGS.scale);
     (indices.as_vec3() + 0.5) * size - (scale / 2.)
 }
 
+// fine
 pub fn get_distance_to_next_octree(
     gp: IVec3,
     rp: Vec3,
@@ -45,80 +46,38 @@ pub fn get_distance_to_next_octree(
 }
 
 pub fn get_next_octree_pos(rp: Vec3, rd: Vec3, i: u32, scale: f32) -> IVec3 {
-    let np = rp + (rd * (octree_size(i, scale)) / 8.0);
+    let np = rp + (rd * octree_size(i, scale) / 2.0);
 
     get_enclosed_octree(&np, 1 << i, SETTINGS.scale)
 }
 
 pub fn offset_pos(rp: Vec3, rd: Vec3, i: u32, scale: f32) -> Vec3 {
-    let d = 1 << i;
-    rp + (rd * (scale / d as f32))
+    rp + (rd * octree_size(i, scale) / 2.0)
 }
-
-pub fn get_next_grid(rp: Vec3, rd: Vec3, i: u32, offset: Vec3) -> IVec3 {
-    let box_dims = octree_size(i, SETTINGS.scale) / 2.0;
-
-    let min = offset - box_dims;
-    let max = offset + box_dims;
-
-    let t1 = (min - rp) / rd;
-    let t2 = (max - rp) / rd;
-
-    // let tnear = std::max(std::min(tx1, tx2), std::max(std::min(ty1, ty2), std::min(tz1, tz2)));
-
-    // let tnear = min.x.max(t_min.y.max(t_min.z));
-
-    let tnear = t1.x.min(t2.x).max(t1.y.min(t2.y).max(t1.z.min(t2.z)));
-    let tfar = t1.x.max(t2.x).min(t1.y.max(t2.y).min(t1.z.max(t2.z)));
-
-    if tnear > tfar || tfar < 0. {
-        panic!("NO INTERSECT, how?");
-    }
-
-    tnear.abs()
-}
-
 
 pub fn move_to_edge(rp: Vec3, rd: Vec3, i: u32, offset: Vec3) -> f32 {
-    // float tx1, tx2, ty1, ty2, tz1, tz2, tNear, tFar;
-    // tx1 = (xMin - posn.x) / dir.x;
-    // tx2 = (xMax - posn.x) / dir.x;
-    // ty1 = (yMin - posn.y) / dir.y;
-    // ty2 = (yMax - posn.y) / dir.y;
-    // tz1 = (zMin - posn.z) / dir.z;
-    // tz2 = (zMax - posn.z) / dir.z;
-    //
-    // tNear = std::max(std::min(tx1, tx2), std::max(std::min(ty1, ty2), std::min(tz1, tz2)));
-    // tFar = std::min(std::max(tx1, tx2), std::min(std::max(ty1, ty2), std::max(tz1, tz2)));
-    //
-    // if (tNear > tFar || tFar < 0) {
-    //     return -1;
-    // }
-    //
-    // return tNear;
-
     let box_dims = octree_size(i, SETTINGS.scale) / 2.0;
 
-    let min = offset - box_dims;
-    let max = offset + box_dims;
+    let min_pos = offset + box_dims;
+    let max_pos = offset - box_dims;
 
-    let t1 = (min - rp) / rd;
-    let t2 = (max - rp) / rd;
+    //eprintln!("mp: {}, mxp: {}", min_pos, max_pos);
 
-    // let tnear = std::max(std::min(tx1, tx2), std::max(std::min(ty1, ty2), std::min(tz1, tz2)));
+    //eprintln!("bd: {}", box_dims);
 
-    // let tnear = min.x.max(t_min.y.max(t_min.z));
+    let t0 = (min_pos - rp) / rd;
+    let t1 = (max_pos - rp) / rd;
 
-    let tnear = t1.x.min(t2.x).max(t1.y.min(t2.y).max(t1.z.min(t2.z)));
-    let tfar = t1.x.max(t2.x).min(t1.y.max(t2.y).min(t1.z.max(t2.z)));
+    //eprintln!("t0: {}, t1: {}", t0, t1);
 
-    if tnear > tfar || tfar < 0. {
-        panic!("NO INTERSECT, how?");
-    }
+    let t_min = t0.min(t1);
 
-    tnear.abs()
+    //eprintln!("t_min: {}", t_min);
+
+    t_min.x.max(t_min.y.max(t_min.z)).abs()
 }
 
+// fine
 pub fn get_current_octree_dist(
     rp: Vec3,
     i: u32,
@@ -147,8 +106,8 @@ pub fn get_dist_for_dim(
     let d = 1 << i;
 
     //First we need to check if the octree we are currently in is empty.
-    let gp = get_enclosed_octree(&rp, d, SETTINGS.scale);
     // let gp = IVec3::splat(0);
+    let gp = get_enclosed_octree(&rp, d, SETTINGS.scale);
     let gpu = gp.max(IVec3::splat(0)).as_uvec3();
 
     let ngp = get_next_octree_pos(rp, rd, i, SETTINGS.scale);
@@ -187,13 +146,13 @@ pub fn get_dist_for_dim(
         }
     }
 
-    let cube_offset = calc_pos_from_invoc_id(ngp, i, SETTINGS.scale);
+    let cube_offset = calc_pos_from_invoc_id(gp, i, SETTINGS.scale);
     //eprintln!("cube_offset: {}", cube_offset);
     // get_dist(rp - cube_offset, i).abs()
 
-    let dist = move_to_edge(rp, rd, i, cube_offset);
+    let new_pos = move_to_edge(rp, rd, i, cube_offset);
     //eprintln!("new_pos: {}", new_pos);
-    Vec2::new(dist, 0.0)
+    Vec2::new(new_pos, 0.0)
 }
 
 pub fn valid_octree_pos(gp: IVec3, i: u32) -> bool {
@@ -212,7 +171,7 @@ pub fn closest_octree(
 
     let dist = get_dist_for_dim(rp, rd, i, voxel, octree);
 
-    if dist.y > 0.0 {
+    if dist.y > 0.0 && dist.x < 0.001 {
         *dim = 1;
     }
 
@@ -231,7 +190,7 @@ pub fn cast_ray(ro: Vec3, rd: Vec3, voxel: &Vec<Voxel>, octree: &Vec<OCTree>) ->
         //eprintln!("POS IN RAY: {}", pos);
 
         let d = closest_octree(pos, rd, &mut depth, voxel, octree);
-        // let d = get_current_octree_dist(pos, depth, voxel, octree);
+        // let d = get_current_octree_dist(pos, 0, voxel, octree);
         //eprintln!("d: {}, t: {}", d, t);
 
         //eprintln!("d: {}", d);
@@ -240,8 +199,8 @@ pub fn cast_ray(ro: Vec3, rd: Vec3, voxel: &Vec<Voxel>, octree: &Vec<OCTree>) ->
         //
         // }
 
-        // if d < 0.001 && depth > 0 {
-        if d < 0.001 {
+        // if d < 0.001 {
+        if d < 0.001 && depth > 0 {
             break;
         }
 
@@ -252,8 +211,8 @@ pub fn cast_ray(ro: Vec3, rd: Vec3, voxel: &Vec<Voxel>, octree: &Vec<OCTree>) ->
         }
     }
 
-    if t > 20. {
-        // if t > 20. || depth == 0 {
+    // if t > 20. {
+    if t > 20. || depth == 0 {
         t = -1.;
     }
 
@@ -345,7 +304,7 @@ mod ray_test {
             //eprintln!("POS IN RAY: {}", pos);
 
             let d = closest_octree(pos, rd, &mut depth, voxel, octree);
-            // let d = get_current_octree_dist(pos, depth, voxel, octree);
+            // let d = get_current_octree_dist(pos, 0, voxel, octree);
             //eprintln!("d: {}, t: {}", d, t);
 
             //eprintln!("d: {}", d);
@@ -354,8 +313,8 @@ mod ray_test {
             //
             // }
 
-            // if d < 0.001 && depth > 0 {
-            if d < 0.001 {
+            // if d < 0.001 {
+            if d < 0.001 && depth > 0 {
                 break;
             }
 
@@ -366,8 +325,8 @@ mod ray_test {
             }
         }
 
-        if t > 20. {
-            // if t > 20. || depth == 0 {
+        // if t > 20. {
+        if t > 20. || depth == 0 {
             t = -1.;
         }
 
