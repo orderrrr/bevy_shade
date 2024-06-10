@@ -38,31 +38,59 @@ pub fn get_enclosed_octree(point: Vec3, dim: usize, scale: f32) -> IVec3 {
 }
 
 pub fn mask_pos(p: Vec3) -> Vec3 {
-    p.signum() + 1. / 2.
+    (p.signum() + 1. / 2.).floor()
 }
 
 pub fn mask_neg(p: Vec3) -> Vec3 {
-    p.signum() - 1. / 2. * -1.
+    (p.signum() - 1. / 2. * -1.).floor()
 }
 
-pub fn get_next_grid_y(rp: Vec3, rd: Vec3, i: u32) -> i32 {
+// pub fn get_next_grid_y(rp: Vec3, rd: Vec3, i: u32) -> Vec3 {
+//     let box_dims = octree_size(i, SETTINGS.scale) / 2.0;
+//
+//     let gp = get_enclosed_octree(rp, 1 << i, SETTINGS.scale).as_vec3();
+//     // basically if rd is moving positive in any directions, we increase by one on those directions.
+//     let ay = ((gp + mask_pos(rd))) * box_dims;
+//
+//     let ang = (rd.dot(vec3(1.0, 1.0, 1.0).normalize()) / rd.length()).acos();
+//     // let ya = rd.y.signum() * box_dims;
+//
+//     let ax = rp.x + (rp.y + ay.y) / ang.tan();
+//     let az = rp.z + (rp.x + ay.x) / ang.tan();
+//
+//     eprintln!("box_dims - {}", box_dims);
+//     eprintln!("gp - {}", gp);
+//     eprintln!("ay - {}", ay);
+//     eprintln!("ang - {}", ang);
+//     eprintln!("tan - {}", ang.tan());
+//     eprintln!("ax - {}", ax);
+//     eprintln!("az - {}", ax);
+//
+//     vec3(ay.y, ax, az)
+// }
+
+pub fn get_next_grid_y(rp: Vec3, rd: Vec3, i: u32) -> Vec3 {
     let box_dims = octree_size(i, SETTINGS.scale) / 2.0;
 
     let gp = get_enclosed_octree(rp, 1 << i, SETTINGS.scale).as_vec3();
     // basically if rd is moving positive in any directions, we increase by one on those directions.
-    let ay = ((gp + mask_pos(rd)) * box_dims).y;
+    let ay = ((gp + mask_pos(rd))) * box_dims;
 
-    let ang = rd.normalize().dot(Vec3::splat(0.0));
+    let ang = (rd.dot(vec3(1.0, 1.0, 1.0).normalize()) / rd.length()).acos();
     // let ya = rd.y.signum() * box_dims;
 
-    let ax = rp.x + (rp.y - ay) / ang.tan();
+    let ax = rp.x + (rp.y + ay.y) / ang.tan();
+    let az = rp.z + (rp.x + ay.x) / ang.tan();
 
+    eprintln!("box_dims - {}", box_dims);
+    eprintln!("gp - {}", gp);
+    eprintln!("ay - {}", ay);
+    eprintln!("ang - {}", ang);
+    eprintln!("tan - {}", ang.tan());
+    eprintln!("ax - {}", ax);
+    eprintln!("az - {}", ax);
 
-    let xa = box_dims / ang.tan();
-    //wipwipwip
-    
-
-    0
+    vec3(ay.y, ax, az)
 }
 
 #[cfg(test)]
@@ -330,9 +358,10 @@ mod tests {
 
     #[test]
     fn next_grid_tests() {
+
         assert_eq!(
-            get_next_grid_y(vec3(1.0, 0.0, 0.0), vec3(1.0, 0.0, 0.0), 0),
-            1
+            get_next_grid_y(vec3(0.0, 0.0, 0.0), vec3(1.0, 1.0, 0.0), 0),
+            vec3(1.0, 1.0, 0.0)
         )
     }
 }
