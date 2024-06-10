@@ -1,4 +1,6 @@
-use glam::{IVec3, UVec3, Vec3};
+use glam::{vec3, IVec3, UVec3, Vec3};
+
+use super::octree::{octree_size, SETTINGS};
 
 const SCALE: f32 = 10.0;
 
@@ -29,22 +31,38 @@ pub fn count_octrees_below(cd: u32, i: u32) -> u32 {
 }
 
 #[allow(dead_code)]
-pub fn get_enclosed_octree(point: &Vec3, dim: usize, scale: f32) -> IVec3 {
+pub fn get_enclosed_octree(point: Vec3, dim: usize, scale: f32) -> IVec3 {
     let offset = scale / 2.0;
-    let point = *point + offset;
-
-    // Adjust point to fit within the range and scale by the dimension
     let scale = scale / dim as f32;
-    let scaled_point = point / scale;
+    return ((point.clone() + offset) / scale).floor().as_ivec3();
+}
 
-    let test = scaled_point.floor().as_ivec3();
+pub fn mask_pos(p: Vec3) -> Vec3 {
+    p.signum() + 1. / 2.
+}
 
-    // eprintln!(
-    //     "point: {}, test: {}, spoint: {}, scale: {}",
-    //     point, test, scaled_point, scale
-    // );
+pub fn mask_neg(p: Vec3) -> Vec3 {
+    p.signum() - 1. / 2. * -1.
+}
 
-    test
+pub fn get_next_grid_y(rp: Vec3, rd: Vec3, i: u32) -> i32 {
+    let box_dims = octree_size(i, SETTINGS.scale) / 2.0;
+
+    let gp = get_enclosed_octree(rp, 1 << i, SETTINGS.scale).as_vec3();
+    // basically if rd is moving positive in any directions, we increase by one on those directions.
+    let ay = ((gp + mask_pos(rd)) * box_dims).y;
+
+    let ang = rd.normalize().dot(Vec3::splat(0.0));
+    // let ya = rd.y.signum() * box_dims;
+
+    let ax = rp.x + (rp.y - ay) / ang.tan();
+
+
+    let xa = box_dims / ang.tan();
+    //wipwipwip
+    
+
+    0
 }
 
 #[cfg(test)]
@@ -261,7 +279,7 @@ mod tests {
 
         assert_eq!(
             get_enclosed_octree(
-                &Vec3::new(lower + delta, lower + delta, lower + delta),
+                Vec3::new(lower + delta, lower + delta, lower + delta),
                 dim,
                 SCALE
             ),
@@ -269,13 +287,13 @@ mod tests {
         );
 
         assert_eq!(
-            get_enclosed_octree(&Vec3::new(0.0, 0.0, 0.0), dim, SCALE),
+            get_enclosed_octree(Vec3::new(0.0, 0.0, 0.0), dim, SCALE),
             IVec3::new(half_dim as i32, half_dim as i32, half_dim as i32)
         );
 
         assert_eq!(
             get_enclosed_octree(
-                &Vec3::new(upper - delta, upper - delta, upper - delta),
+                Vec3::new(upper - delta, upper - delta, upper - delta),
                 dim,
                 SCALE
             ),
@@ -295,18 +313,26 @@ mod tests {
         let bound = (SCALE / 2.0) - 0.0001;
 
         assert_eq!(
-            get_enclosed_octree(&Vec3::new(-bound, -bound, -bound), dim, SCALE),
+            get_enclosed_octree(Vec3::new(-bound, -bound, -bound), dim, SCALE),
             IVec3::new(0, 0, 0)
         );
 
         assert_eq!(
-            get_enclosed_octree(&Vec3::new(0.0, 0.0, 0.0), dim, SCALE),
+            get_enclosed_octree(Vec3::new(0.0, 0.0, 0.0), dim, SCALE),
             IVec3::new(0, 0, 0)
         );
 
         assert_eq!(
-            get_enclosed_octree(&Vec3::new(bound, bound, bound), dim, SCALE),
+            get_enclosed_octree(Vec3::new(bound, bound, bound), dim, SCALE),
             IVec3::new(0, 0, 0)
         );
+    }
+
+    #[test]
+    fn next_grid_tests() {
+        assert_eq!(
+            get_next_grid_y(vec3(1.0, 0.0, 0.0), vec3(1.0, 0.0, 0.0), 0),
+            1
+        )
     }
 }
