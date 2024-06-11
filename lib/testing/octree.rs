@@ -11,6 +11,8 @@ pub const SETTINGS: OCTreeSettings = OCTreeSettings {
     depth: 2,
     scale: 2.0,
 };
+pub const MIN_BOUND: Vec3 = vec3(-1.0, -1.0, -1.0);
+pub const MAX_BOUND: Vec3 = vec3(1.0, 1.0, 1.0);
 
 pub fn octree_size(i: u32, scale: f32) -> f32 {
     scale / (1 << i) as f32
@@ -193,7 +195,6 @@ pub fn get_dist_for_dim(
     eprintln!("GP NEW: {}", gp);
 
     for _ in 0..300 {
-
         eprintln!("GP: {}", gp);
 
         let gpu = gp.max(IVec3::splat(0)).as_uvec3();
