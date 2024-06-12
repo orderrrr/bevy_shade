@@ -1,3 +1,5 @@
+// NOTE this is not really rust like code, I'm writing it as if i'm writing it in wgsl, so no options, errors or tuples.
+
 use glam::{vec3, IVec3, UVec3, Vec3};
 
 use super::octree::{octree_size, SETTINGS};
@@ -104,64 +106,76 @@ pub fn get_next_grid_y(rp: Vec3, rd: Vec3, i: u32) -> Vec3 {
 }
 
 fn cast_voxel(rp: Vec3, rd: Vec3, vmin: Vec3, vmax: Vec3, scale: f32) -> bool {
-    let mut tmin = 0.0;
+    let mut tmin: f32 = 0.0;
     let mut tmax = 0.0;
 
     let found = ray_box_intersection(rp, rd, vmin, vmax, &mut tmin, &mut tmax);
-    let g3d: Vec3 = (vmax - vmin) / (scale);
+    eprintln!("tmin: {}", tmin);
+    eprintln!("tmax: {}", tmax);
 
-    if found {
+    if !found {
         return false;
     }
 
-    let rs = rp + tmin * rd;
-    let re = rp + tmax * rd;
-    let bsize = vmax - vmin;
-    let vmax;
-    let tmax;
-    let vsize;
-    let tdelta;
+    let g3d: Vec3 = (vmax - vmin) / (scale);
 
-    let xi = Vec3::splat(1.0).max((rs - vmin / bsize).ceil());
-    let exi = Vec3::splat(1.0).max((re - vmin / bsize).ceil());
+    let ray_start = rp + rd * tmin;
+    let ray_end = rp + rd * tmax;
+    let bsize = scale;
 
-    let mut p = vec3(
-        ((((rs.x - vmin.x) / bsize.x) * g3d.x) + 1.).floor(),
-        ((((rs.y - vmin.y) / bsize.y) * g3d.y) + 1.).floor(),
-        ((((rs.z - vmin.z) / bsize.z) * g3d.z) + 1.).floor(),
-    );
+    let mut current_index = Vec3::splat(1.0).max(((ray_start - vmin) / bsize).ceil());
+    let end_index = Vec3::splat(1.0).max((ray_end - vmin / bsize).ceil());
 
-    if p.x == g3d.x + 1. {
-        p.x = p.x - 1.;
-    }
+    let step = sign(rd);
+    let tdelta = bsize / (rd.abs());
+    let mut tmax = tmin + (vmin + (current_index * step) * bsize - ray_start / rd);
 
-    if p.y == g3d.y + 1. {
-        p.y = p.y - 1.;
-    }
-
-    if p.z == g3d.z + 1. {
-        p.z = p.z - 1.;
-    }
-
-    let step = mask_neg(rd);
-    let tvoxel = (p - (-1. * step)) / g3d;
-
-    vmax = vmin + tvoxel * bsize;
-    tmax = tmin + (vmax - rs) / rd;
-    vsize = bsize / g3d;
-    tdelta = vsize / rd.abs();
-
-    eprintln!("tmin: {}", tmin);
-    eprintln!("p: {}", p);
     eprintln!("g3d: {}", g3d);
-    eprintln!("r: {}", rs);
+    eprintln!("rd: {}", rd);
+    eprintln!("r: {}", ray_start);
+    eprintln!("re: {}", ray_end);
     eprintln!("bsize: {}", bsize);
-    eprintln!("tvoxel: {}", tvoxel);
     eprintln!("step: {}", step);
     eprintln!("vmax: {}", vmax);
     eprintln!("tmax: {}", tmax);
-    eprintln!("vsize: {}", vsize);
     eprintln!("tdelta: {}", tdelta);
+    eprintln!("xi: {}", current_index);
+    eprintln!("exi: {}", end_index);
+
+    let max_iter = 100;
+    let mut i = 0;
+
+    let mut dmut = tdelta;
+
+    while (current_index.x != end_index.x
+        || current_index.y != end_index.y
+        || current_index.z != end_index.z)
+        && i < max_iter
+    {
+        eprintln!("tmax: {}", tmax);
+        eprintln!("Intersection: voxel = {}", current_index);
+        eprintln!("Intersection: pos = {}", rp + (rd * tdelta * (i + 1) as f32));
+
+        i += 1;
+
+        if tmax.x < tmax.y && tmax.x < tmax.z {
+            // x-axis traversal.
+            current_index.x += step.x;
+            tmax.x += tdelta.x;
+        } else if tmax.y < tmax.z {
+            // y-axis traversal.
+            current_index.y += step.y;
+            tmax.y += tdelta.y;
+        } else {
+            // z-axis traversal.
+            current_index.z += step.z;
+            tmax.z += tdelta.z;
+        }
+    }
+
+    eprintln!("tmax: {}", tmax);
+    eprintln!("Intersection: voxel = {}", current_index);
+    eprintln!("Intersection: pos = {}", rp + (rd * dmut));
 
     true
 }
@@ -182,48 +196,57 @@ fn ray_box_intersection(
     tmin: &mut f32,
     tmax: &mut f32,
 ) -> bool {
-    let vmint = vec3(
-        select(vmin.x, vmax.x, rd.x >= 0.),
-        select(vmin.y, vmax.y, rd.y >= 0.),
-        select(vmin.z, vmax.z, rd.z >= 0.),
-    );
-    let vmaxt = vec3(
-        select(vmax.x, vmin.x, rd.x >= 0.),
-        select(vmax.y, vmin.y, rd.y >= 0.),
-        select(vmax.z, vmin.z, rd.z >= 0.),
-    );
+    let rdi = 1. / rd;
 
-    let tmins = (vmint - rp) / rd;
-    let tmaxs = (vmaxt - rp) / rd;
+    if rdi.x >= 0. {
+        *tmin = (vmin.x - rp.x) * rdi.x;
+        *tmax = (vmax.x - rp.x) * rdi.x;
+    } else {
+        *tmin = (vmax.x - rp.x) * rdi.x;
+        *tmax = (vmin.x - rp.x) * rdi.x;
+    }
 
-    if tmins.x > tmaxs.y || tmins.y > tmaxs.x {
+    let tymin;
+    let tymax;
+    if rdi.y >= 0. {
+        tymin = (vmin.y - rp.y) * rdi.y;
+        tymax = (vmax.y - rp.y) * rdi.y;
+    } else {
+        tymin = (vmax.y - rp.y) * rdi.y;
+        tymax = (vmin.y - rp.y) * rdi.y;
+    }
+
+    if *tmin > tymax || tymin > *tmax {
         return false;
     }
-
-    *tmin = tmins.x;
-    *tmax = tmaxs.x;
-
-    if tmins.y > *tmin {
-        *tmin = tmins.y;
+    if tymin > *tmin {
+        *tmin = tymin;
+    };
+    if tymax < *tmax {
+        *tmax = tymax;
     }
 
-    if tmaxs.y < *tmax {
-        *tmax = tmaxs.y;
+    let tzmin;
+    let tzmax;
+    if rdi.z >= 0. {
+        tzmin = (vmin.z - rp.z) * rdi.z;
+        tzmax = (vmax.z - rp.z) * rdi.z;
+    } else {
+        tzmin = (vmax.z - rp.z) * rdi.z;
+        tzmax = (vmin.z - rp.z) * rdi.z;
     }
 
-    if *tmin > tmaxs.z || tmins.z > *tmax {
+    if *tmin > tzmax || tzmin > *tmax {
         return false;
     }
-
-    if tmins.z > *tmin {
-        *tmin = tmins.z;
+    if tzmin > *tmin {
+        *tmin = tzmin;
+    }
+    if tzmax < *tmax {
+        *tmax = tzmax;
     }
 
-    if tmaxs.z < *tmax {
-        *tmax = tmaxs.z;
-    }
-
-    return true;
+    true
 }
 
 #[cfg(test)]
@@ -512,11 +535,11 @@ mod tests {
     fn next_grid_tests() {
         assert_eq!(
             cast_voxel(
-                vec3(3.1, 3.2, 3.0),
+                vec3(3., 3., 3.0),
                 vec3(-1.0, -1.0, -1.0).normalize(),
                 MIN_BOUND,
                 MAX_BOUND,
-                SETTINGS.scale
+                SETTINGS.scale / 2.0
             ),
             false
         )
