@@ -10,3 +10,7 @@
   - can be done in batches
 - make the renderer only update for elements that are updated in the game world.
 - for the raytracer, find a fast and correct way to accurately get the next grid position
+
+
+# other
+- refactor octree struct to use signed ints.

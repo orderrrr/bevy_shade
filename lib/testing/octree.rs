@@ -200,7 +200,7 @@ pub fn get_dist_for_dim(
         let gpu = gp.max(IVec3::splat(0)).as_uvec3();
 
         if valid_octree_pos(gp, i) {
-            let index = below + get_unique_index(&gpu, i);
+            let index = below + get_unique_index(gpu, i);
             let octree = octrees[index as usize];
 
             if octree.mask > 0 {

@@ -2,21 +2,23 @@
 
 use glam::{vec3, IVec3, UVec3, Vec3};
 
+use crate::shaders::{OCTree, Voxel};
+
 use super::octree::{octree_size, SETTINGS};
 
 #[allow(dead_code)]
-pub fn get_child_pos(parent_pos: &UVec3, child_rel_pos: &UVec3) -> UVec3 {
-    *parent_pos * 2 + *child_rel_pos
+pub fn get_child_pos(parent_pos: UVec3, child_rel_pos: UVec3) -> UVec3 {
+    parent_pos * 2 + child_rel_pos
 }
 
 #[allow(dead_code)]
-pub fn get_unique_index(pos: &UVec3, i: u32) -> u32 {
+pub fn get_unique_index(pos: UVec3, i: u32) -> u32 {
     let d = 1 << i;
     pos.x + pos.y * d + pos.z * d * d
 }
 
 #[allow(dead_code)]
-pub fn get_pos_from_grid_pos(pos: &UVec3, i: u32, scale: f32) -> Vec3 {
+pub fn get_pos_from_grid_pos(pos: UVec3, i: u32, scale: f32) -> Vec3 {
     let s = scale as f32;
     let d = (1 << i) as f32;
     let scale: f32 = s / d;
@@ -105,58 +107,131 @@ pub fn get_next_grid_y(rp: Vec3, rd: Vec3, i: u32) -> Vec3 {
     vec3(ay.y, ax, az)
 }
 
-fn cast_voxel(rp: Vec3, rd: Vec3, vmin: Vec3, vmax: Vec3, scale: f32) -> bool {
+/*
+* Main octree parser.
+*
+* Needs to do the following things:
+* Return a normal, Return a position, Return a voxel position.
+*
+* Can start at any octree depth.
+*
+* Should start initially at the largest depth and iterate down till provided MAX DEPTH.
+*
+* Need to find a preformant way to convert from one depth to another, scaling tdeltas and tmax.
+*/
+fn ray_voxel_intersect(
+    // out
+    normal: &mut Vec3,
+    pos: &mut Vec3,
+    voxel_pos: &mut IVec3,
+
+    rp: Vec3,
+    rd: Vec3, // normalized direction.
+
+    // dims
+    d: u32,
+    vmin: Vec3,
+    vmax: Vec3,
+    scale: f32,
+
+    // only for rust impl
+    octree: Vec<OCTree>,
+    voxel: Vec<Voxel>,
+    debug_print: bool,
+) -> bool {
     let mut tmin: f32 = 0.0;
     let mut tmax = 0.0;
+    let mut d = d;
 
     let found = ray_box_intersection(rp, rd, vmin, vmax, &mut tmin, &mut tmax);
-    eprintln!("tmin: {}", tmin);
-    eprintln!("tmax: {}", tmax);
 
     if !found {
         return false;
     }
 
-    let g3d: Vec3 = (vmax - vmin) / (scale);
+    if debug_print {
+        eprintln!("VOXEL INIT.");
+        eprintln!("tmin: {}", tmin);
+        eprintln!("tmax: {}", tmax);
+        eprintln!("d: {}", d);
+        eprintln!("-----------");
+        eprintln!("\n");
+    }
 
-    let ray_start = rp + rd * tmin;
-    let ray_end = rp + rd * tmax;
-    let bsize = scale;
+    let os = rp + rd * tmin; // octree start.
+    let oe = rp + rd * tmax; // octree end.
+    let bsize = scale / (1 << d) as f32; // octree size at depth.
 
-    let mut current_index = Vec3::splat(1.0).max(((ray_start - vmin) / bsize).ceil());
-    let end_index = Vec3::splat(1.0).max((ray_end - vmin / bsize).ceil());
+    /*
+     * Collision position, not quite voxel position
+     * This is the point in space where the collision has happened.
+     */
+    let mut current_index = Vec3::splat(1.0).max(((os - vmin) / bsize).ceil());
+    let end_index = Vec3::splat(1.0).max((oe - vmin / bsize).ceil()); // where the while loop will stop.
 
-    let step = sign(rd);
-    let tdelta = bsize / (rd.abs());
-    let mut tmax = tmin + (vmin + (current_index * step) * bsize - ray_start / rd);
+    let step = sign(rd); // -1 for neg, 0 for 0, 1 for pos.
+    let tdelta = bsize / (rd.abs()); // step amount in each axis
 
-    eprintln!("g3d: {}", g3d);
-    eprintln!("rd: {}", rd);
-    eprintln!("r: {}", ray_start);
-    eprintln!("re: {}", ray_end);
-    eprintln!("bsize: {}", bsize);
-    eprintln!("step: {}", step);
-    eprintln!("vmax: {}", vmax);
-    eprintln!("tmax: {}", tmax);
-    eprintln!("tdelta: {}", tdelta);
-    eprintln!("xi: {}", current_index);
-    eprintln!("exi: {}", end_index);
+    /*
+     * Simply keeps track of which axis to increment.
+     * can probably be done a little better.
+     */
+    let mut tmax = tmin + (vmin + (current_index * step) * bsize - os / rd);
 
-    let max_iter = 100;
+    let mut cpos = os;
     let mut i = 0;
 
-    let mut dmut = tdelta;
+    if debug_print {
+        eprintln!("INITIAL SETUP.");
+        eprintln!("tmin is : {}", tmin);
+        eprintln!("tmax is : {}", tmax);
+        eprintln!("found is : {}", found);
+        eprintln!("os is : {}", os);
+        eprintln!("oe is : {}", oe);
+        eprintln!("bsize is : {}", bsize);
+        eprintln!("current_index is : {}", current_index);
+        eprintln!("end_index is : {}", end_index);
+        eprintln!("step is : {}", step);
+        eprintln!("tdelta is : {}", tdelta);
+        eprintln!("tmax is : {}", tmax);
+        eprintln!("i is : {}", i);
+        eprintln!("d: {}", d);
+        eprintln!("-----------");
+        eprintln!("\n");
+    }
 
-    while (current_index.x != end_index.x
+    while current_index.x != end_index.x
         || current_index.y != end_index.y
-        || current_index.z != end_index.z)
-        && i < max_iter
+        || current_index.z != end_index.z
     {
-        eprintln!("tmax: {}", tmax);
-        eprintln!("Intersection: voxel = {}", current_index);
-        eprintln!("Intersection: pos = {}", rp + (rd * tdelta * (i + 1) as f32));
+        if debug_print {
+            eprintln!("VOXEL, ITER.");
+            eprintln!("current_index is : {}", current_index);
+            eprintln!("tmax is : {}", tmax);
+            eprintln!("i is : {}", i);
+            eprintln!("voxel = {}", current_index);
+            eprintln!("pos = {}", cpos);
+            eprintln!("d: {}", d);
+            eprintln!("-----------");
+            eprintln!("\n");
+        }
 
-        i += 1;
+        let o = calculate_octree_pos_from_collision(current_index, rd);
+        let idx = get_unique_index(o, d as u32) + count_octrees_below(d, SETTINGS.depth);
+        let oc = octree[idx as usize];
+
+        if debug_print {
+            eprintln!("o: {}", o);
+            eprintln!("idx: {}", idx);
+            eprintln!("oc: {:?}", oc);
+        }
+
+        if oc.mask > 0 {
+            *normal = cpos; // todo inverse of the ray direction ceiled.
+            *pos = cpos;
+            *voxel_pos = o.as_ivec3();
+            return true;
+        }
 
         if tmax.x < tmax.y && tmax.x < tmax.z {
             // x-axis traversal.
@@ -171,13 +246,48 @@ fn cast_voxel(rp: Vec3, rd: Vec3, vmin: Vec3, vmax: Vec3, scale: f32) -> bool {
             current_index.z += step.z;
             tmax.z += tdelta.z;
         }
+
+        if (i + 3) as f32 % 3. == 0.0 {
+            cpos = cpos + (rd * tdelta);
+        }
+
+        i += 1;
     }
 
-    eprintln!("tmax: {}", tmax);
-    eprintln!("Intersection: voxel = {}", current_index);
-    eprintln!("Intersection: pos = {}", rp + (rd * dmut));
+    if debug_print {
+        eprintln!("VOXEL, FINAL ITER.");
+        eprintln!("current_index is : {}", current_index);
+        eprintln!("tmax is : {}", tmax);
+        eprintln!("i is : {}", i);
+        eprintln!("voxel = {}", current_index);
+        eprintln!("pos = {}", cpos);
+        eprintln!("d: {}", d);
+        eprintln!("-----------");
+        eprintln!("\n");
+    }
 
-    true
+    let o = calculate_octree_pos_from_collision(current_index, rd);
+    let idx = get_unique_index(o, d as u32) + count_octrees_below(d, SETTINGS.depth);
+    let oc = octree[idx as usize];
+
+    if debug_print {
+        eprintln!("o: {}", o);
+        eprintln!("idx: {}", idx);
+        eprintln!("oc: {:?}", oc);
+    }
+
+    if oc.mask > 1 {
+        *normal = cpos; // todo inverse of the ray direction ceiled.
+        *pos = cpos;
+        *voxel_pos = o.as_ivec3();
+        return true;
+    }
+
+    false
+}
+
+fn calculate_octree_pos_from_collision(current_index: Vec3, rd: Vec3) -> UVec3 {
+    (current_index - mask_neg(rd)).as_uvec3()
 }
 
 fn select<T>(l: T, r: T, cond: bool) -> T {
@@ -257,7 +367,7 @@ mod tests {
     };
 
     use super::*;
-    use std::collections::HashSet;
+    use std::{collections::HashSet, fs::File, io::Read};
 
     fn test_dim(dim: u32) {
         let parent_depth = dim;
@@ -271,7 +381,7 @@ mod tests {
                         for child_y in 0..2 {
                             for child_z in 0..2 {
                                 let child_rel_pos = UVec3::new(child_x, child_y, child_z);
-                                let child_pos = get_child_pos(&parent_pos, &child_rel_pos);
+                                let child_pos = get_child_pos(parent_pos, child_rel_pos);
 
                                 assert!(child_pos.x < (1 << (parent_depth + 1)));
                                 assert!(child_pos.y < (1 << (parent_depth + 1)));
@@ -302,13 +412,13 @@ mod tests {
                         for child_y in 0..2 {
                             for child_z in 0..2 {
                                 let child_rel_pos = UVec3::new(child_x, child_y, child_z);
-                                let child_pos = get_child_pos(&parent_pos, &child_rel_pos);
+                                let child_pos = get_child_pos(parent_pos, child_rel_pos);
 
                                 assert!(child_pos.x < (1 << (parent_depth + 1)));
                                 assert!(child_pos.y < (1 << (parent_depth + 1)));
                                 assert!(child_pos.z < (1 << (parent_depth + 1)));
 
-                                let index = get_unique_index(&child_pos, parent_depth + 1);
+                                let index = get_unique_index(child_pos, parent_depth + 1);
 
                                 println!("index: {}, pos: {:?}", index, child_pos);
 
@@ -342,7 +452,7 @@ mod tests {
                         assert!(parent_pos.z < (1 << (parent_depth)));
 
                         let id_bel = count_octrees_below(parent_depth, i);
-                        let index = get_unique_index(&parent_pos, parent_depth);
+                        let index = get_unique_index(parent_pos, parent_depth);
 
                         println!(
                             "depth: {}, index: {}, pos: {:?}, count: {:?}",
@@ -370,10 +480,10 @@ mod tests {
                         for child_y in 0..2 {
                             for child_z in 0..2 {
                                 let child_rel_pos = UVec3::new(child_x, child_y, child_z);
-                                let child_pos = get_child_pos(&parent_pos, &child_rel_pos);
+                                let child_pos = get_child_pos(parent_pos, child_rel_pos);
 
                                 let pos = get_pos_from_grid_pos(
-                                    &child_pos,
+                                    child_pos,
                                     parent_depth + 1,
                                     SETTINGS.scale,
                                 );
@@ -533,15 +643,42 @@ mod tests {
 
     #[test]
     fn next_grid_tests() {
+        let voxels: Vec<Voxel> = {
+            let mut voxels_file = File::open("voxels.json").unwrap();
+            let mut slice: Vec<u8> = vec![];
+            let _ = voxels_file.read_to_end(&mut slice);
+
+            serde_json::from_slice(&slice).unwrap()
+        };
+
+        let octrees: Vec<OCTree> = {
+            let mut voxels_file = File::open("octrees.json").unwrap();
+            let mut slice: Vec<u8> = vec![];
+            let _ = voxels_file.read_to_end(&mut slice);
+
+            serde_json::from_slice(&slice).unwrap()
+        };
+
+        let mut normal_pos = Vec3::splat(-1.);
+        let mut pos = Vec3::splat(-1.);
+        let mut voxel_pos = IVec3::splat(-1);
+
         assert_eq!(
-            cast_voxel(
+            ray_voxel_intersect(
+                &mut normal_pos,
+                &mut pos,
+                &mut voxel_pos,
                 vec3(3., 3., 3.0),
                 vec3(-1.0, -1.0, -1.0).normalize(),
+                0,
                 MIN_BOUND,
                 MAX_BOUND,
-                SETTINGS.scale / 2.0
+                SETTINGS.scale,
+                octrees,
+                voxels,
+                true,
             ),
-            false
+            true
         )
     }
 }
