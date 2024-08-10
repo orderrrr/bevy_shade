@@ -1,0 +1,20 @@
+{
+  "name": "wgputoy",
+  "type": "module",
+  "collaborators": [
+    "David A Roberts <d@vidr.cc>"
+  ],
+  "version": "0.1.1",
+  "files": [
+    "wgputoy_bg.wasm",
+    "wgputoy.js",
+    "wgputoy_bg.js",
+    "wgputoy.d.ts"
+  ],
+  "main": "wgputoy.js",
+  "types": "wgputoy.d.ts",
+  "sideEffects": [
+    "./wgputoy.js",
+    "./snippets/*"
+  ]
+}
