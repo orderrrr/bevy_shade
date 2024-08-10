@@ -1,10 +1,9 @@
 {
   "name": "sveltekit-static",
+  "type": "module",
   "scripts": {
-    "link": "cd ./local_modules/shade_mod && npm link && cd ../js_reader && npm link && cd ../../ && npm link shade_mod && npm link js_reader",
-    "cargo-build": "cargo build --release --target wasm32-unknown-unknown && wasm-bindgen --no-typescript --target web --out-dir ./static/shade/ --out-name bevy_shade ./target/wasm32-unknown-unknown/release/bevy_shade.wasm",
-    "replace-import": "npx -y shx sed -i \"s/'js_reader'/'\\/js_reader\\.js?url'/g\" ./static/shade/bevy_shade.js",
-    "dev": "npm run cargo-build && npm run replace-import && vite dev",
+    "cargo-build": "npx wasm-pack build --dev wgpu-compute-toy --out-dir ../src/lib/wgputoy",
+    "dev": "npm run cargo-build && vite dev",
     "build": "vite build",
     "preview": "vite preview"
   },
@@ -16,15 +15,17 @@
     "sass": "^1.77.1",
     "svelte": "^4.2.9",
     "svelte-preprocess": "^5.1.4",
-    "vite-plugin-iso-import": "^1.1.0",
     "vite": "^5.0.12"
   },
-  "type": "module",
   "dependencies": {
     "@codemirror/theme-one-dark": "^6.0.0",
     "@iizukak/codemirror-lang-wgsl": "^0.3.0",
+    "@replit/codemirror-vim": "^6.2.1",
     "codemirror": "^6.0.1",
     "pocketbase": "^0.21.2",
-    "svelte-codemirror-editor": "^1.4.0"
+    "svelte-codemirror-editor": "^1.4.0",
+    "use-animation-frame": "^0.1.5",
+    "vite-plugin-wasm": "^3.3.0",
+    "wasm-brotli": "^2.0.2"
   }
 }

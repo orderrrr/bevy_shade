@@ -6,6 +6,13 @@
 }
 
 @font-face {
+  font-family: "InputMono";
+  src: local("Input"), url("/fonts/InputMono-Black.ttf");
+  font-weight: normal;
+  font-display: swap;
+}
+
+@font-face {
   font-family: "Noto Emoji";
   src: local("Noto Emoji"), local("NotoEmoji"), url("/fonts/NotoEmoji-VariableFont_wght.ttf");
   font-weight: normal;

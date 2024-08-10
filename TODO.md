@@ -2,7 +2,7 @@
 - Find a way to get around having to put js_reader.js in root path
 - Bevy async for checking if should reload shader
 
-
+- compress shader code into the url of the page
 
 
 # render

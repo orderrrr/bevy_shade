@@ -1,19 +1,14 @@
 import { sveltekit } from "@sveltejs/kit/vite";
 import { defineConfig } from "vite";
-import { isoImport } from "vite-plugin-iso-import";
+import { default as wasm } from "vite-plugin-wasm";
 
 /** @type {import('vite').UserConfig} */
 const config = defineConfig({
-  plugins: [sveltekit(), isoImport()],
-  optimizeDeps: {
-    include: ["js_reader"],
-  },
+  plugins: [sveltekit(), wasm()],
   css: {
     preprocessorOptions: {
       scss: {
-        additionalData: `
-                  @import './src/sass/variables.scss';
-                `,
+        additionalData: `@import './src/sass/variables.scss';`,
       },
     },
   },

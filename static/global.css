@@ -1,34 +1,61 @@
 :root {
-	--black: #282c34;
-	--white: #abb2bf;
-	--light-red: #e06c75;
-	--dark-red: #be5046;
-	--green: #98c379;
-	--light-yellow: #e5c07b;
-	--dark-yellow: #d19a66;
-	--blue: #61afef;
-	--magenta: #c678dd;
-	--cyan: #56b6c2;
-	--gutter-grey: #4b5263;
-	--comment-grey: #5c6370;
+    --black: #282c34;
+    --white: #abb2bf;
+    --light-red: #e06c75;
+    --dark-red: #be5046;
+    --green: #98c379;
+    --light-yellow: #e5c07b;
+    --dark-yellow: #d19a66;
+    --blue: #61afef;
+    --magenta: #c678dd;
+    --cyan: #56b6c2;
+    --gutter-grey: #4b5263;
+    --comment-grey: #5c6370;
 }
 
+.codemirror-wrapper * {
+    font-family: InputMono, DankMono, monospace !important;
+    font-size: 16px;
+    background-color: transparent !important;
+}
 
 .cm-editor {
-	background-color: transparent !important;
+    background-color: transparent !important;
 }
-.cm-content,.cm-editor {
-	background-color: transparent !important;
+
+.cm-content,
+.cm-editor {
+    background-color: transparent !important;
 }
 
 .cm-line {
-	/* background-color: var(--black) !important; */
+    /* background-color: var(--black) !important; */
 
-	/* background-color: color-mix(in srgb, var(--black) var(100%, 100%), transparent) !important; */
-	background-color: color-mix(in srgb,var(--black), #0000 20%) !important;
+    /* background-color: color-mix(in srgb, var(--black) var(100%, 100%), transparent) !important; */
+    background-color: color-mix(in srgb, var(--black), #0000 20%) !important;
 
-	display: block !important;
-	width: fit-content !important;
+    display: block !important;
+    width: fit-content !important;
+}
+
+.cm-panels {
+    background-color: transparent !important;
+}
+
+.cm-panels {
+    background-color: color-mix(in srgb, var(--black), #0000 20%) !important;
+}
+
+.cm-panels-bottom {
+    border-top: none !important;
+}
+
+.cm-panel {
+    background-color: transparent !important;
+}
+
+.cm-vim-panel {
+    background-color: transparent !important;
 }
 
 /* .ͼq,.ͼp,.cm-matchingBracket { */
