@@ -1,6 +1,4 @@
 <script>
-    import { onMount } from "svelte";
-    import { writable, derived } from "svelte/store";
     import CodeMirror from "svelte-codemirror-editor";
     import { basicSetup } from "codemirror";
     import { oneDark } from "@codemirror/theme-one-dark";
@@ -12,33 +10,23 @@
         parseError,
         manualReload,
         isSafeContext,
-        playing,
     } from "$lib/canvas/stores.js";
+    import { compress, decompress } from "./util.js";
 
-    let value = `
-        @compute @workgroup_size(16, 16)
-        fn main_image(@builtin(global_invocation_id) id: vec3u) {
-            // Viewport resolution (in pixels)
-            let screen_size = textureDimensions(screen);
+    let default_shader = `G0sDABwFbtNzOZJEv8ZQJDrMt2bR/j7ViXsPYArkFxPExQxycT6i1UW7Unjv4HL6sxJ84pS61Zo0t45F99anGwNcgHnIaebWHkEGPdOx3eZwEapRB5POBGUkpUSXLhh7pFpjVnqHMHaZCiUwGtNOjOYK9sfR1J5X0DLfPY+u0e/MVwDI8thx1SJFCHLDypWRDtbuBoQEoIYQ2Jv7pfs2ckyDsZyZSw8V1AzXlklo0rvi2L8PU3wi638AmHoQrfRCFG6QWf39FEZ9D9/M94Hm3h8LKqPv6IM0YoEG2/LfIZYQhvZX+s/6SzXkTMoIbTin9e51DeAOw0M6QZ4fTwUizioj0mjL8FRPb0zXrsUJHEaHB4o/oCK4vz8QwnBkn0gtA+OYNOCSZG0ZJMJCzJohJB36atBn+Uq+NpO6tTph+8Dj/pBe7xd4h/m1tyIJkYSVmCzp9kSol4Zq2yrxHYEkfLL0DOa9bgJS93Q86SoniIgdAW3nubuQE2t5DMSRLSSeSL30xCZlQdWU3wJ8w9hpjlWgxiIM`;
+    var params = window.location.hash.substring(1);
 
-            // Prevent overdraw for workgroups on the edge of the viewport
-            if (id.x >= screen_size.x || id.y >= screen_size.y) { return; }
+    if (params.length > 0 || params == null || params == "") {
+        params = default_shader;
+    }
 
-            // Pixel coordinates (centre of pixel, origin at bottom left)
-            let fragCoord = vec2f(f32(id.x) + .5, f32(screen_size.y - id.y) - .5);
+    let param_promise = decompress(params);
+    let value = "";
 
-            // Normalised pixel coordinates (from 0 to 1)
-            let uv = fragCoord / vec2f(screen_size);
-
-            // Time varying pixel colour
-            var col = .5 + .2 * cos(time.elapsed + uv.xyx + vec3f(0.,2.,4.));
-
-            // Convert from gamma-encoded to linear colour space
-            col = pow(col, vec3f(2.2));
-
-            // Output to screen (linear colour space)
-            textureStore(screen, id.xy, vec4f(col, 1.));
-        }`;
+    param_promise.then((promise) => {
+        value = promise;
+        handle_change();
+    });
 
     let wgputoy = null;
 
@@ -46,7 +34,8 @@
         if (isSafeContext(wgputoy)) {
             reload();
         }
-        // push_shader("shaders/fragment.wgsl", value);
+
+        window.location.hash = await compress(value);
     };
 
     const reload = () => {
@@ -135,7 +124,7 @@
         console.log("error", summary, row, col);
     };
 
-    $: if ($wgpuRenderer) {
+    $: if ($wgpuRenderer && param_promise) {
         wgputoy = $wgpuRenderer;
 
         let lastTimestamp = 0;
@@ -163,14 +152,16 @@
     }
 </script>
 
-<CodeMirror
-    class="text_edit"
-    bind:value
-    extensions={[vim(), basicSetup]}
-    lang={wgsl()}
-    theme={oneDark}
-    on:change={handle_change}
-/>
+{#if param_promise}
+    <CodeMirror
+        class="text_edit"
+        bind:value
+        extensions={[vim(), basicSetup]}
+        lang={wgsl()}
+        theme={oneDark}
+        on:change={handle_change}
+    />
+{/if}
 
 <style>
     .text_edit {

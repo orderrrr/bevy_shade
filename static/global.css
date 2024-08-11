@@ -1,3 +1,24 @@
+@font-face {
+    font-family: "DankMono";
+    src: url("/fonts/DankMono-Regular.woff2");
+    font-weight: normal;
+    font-display: swap;
+}
+
+@font-face {
+    font-family: "DankMono";
+    src: url("/fonts/DankMono-Bold.woff2");
+    font-weight: bold;
+    font-display: swap;
+}
+
+@font-face {
+    font-family: "InputMono";
+    src: local("Input"), url("/fonts/InputMono-Black.ttf");
+    font-weight: normal;
+    font-display: swap;
+}
+
 :root {
     --black: #282c34;
     --white: #abb2bf;
@@ -14,9 +35,10 @@
 }
 
 .codemirror-wrapper * {
-    font-family: InputMono, DankMono, monospace !important;
+    font-family: DankMono, InputMono, monospace !important;
+    font-weight: bold;
     font-size: 16px;
-    background-color: transparent !important;
+    /* background-color: transparent !important; */
 }
 
 .cm-editor {
@@ -56,6 +78,11 @@
 
 .cm-vim-panel {
     background-color: transparent !important;
+    color: var(--comment-grey) !important;
+}
+
+.cm-vim-panel input {
+    color: var(--white) !important;
 }
 
 /* .ͼq,.ͼp,.cm-matchingBracket { */
