@@ -1,5 +1,4 @@
 <script>
-    console.log("HERE?");
     import Canvas from "$lib/canvas/Canvas.svelte";
     import "../app.css";
 

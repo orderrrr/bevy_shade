@@ -1,6 +1,9 @@
 <script>
-    import Editor from "./shader/editor.svelte";
+    import CodeMirror from "svelte-codemirror-editor";
+    import { basicSetup } from "codemirror";
+    import { oneDark } from "@codemirror/theme-one-dark";
     import { wgsl } from "@iizukak/codemirror-lang-wgsl";
+    import { vim } from "@replit/codemirror-vim";
     import { getDimensions } from "$lib/wgputoy.js";
     import {
         manual_reload,
@@ -11,7 +14,7 @@
         resize,
         code,
     } from "$lib/canvas/stores.js";
-    import { compress, decompress } from "./shader/util.js";
+    import { compress, decompress } from "$lib/util.js";
 
     export let bindID = "wgputoy-canvas";
 
@@ -184,7 +187,14 @@
 </script>
 
 {#if param_promise}
-    <Editor bind:value {handle_change} lang={wgsl} />
+    <CodeMirror
+        class="text_edit"
+        bind:value
+        on:change={handle_change}
+        lang={wgsl()}
+        theme={oneDark}
+        extensions={[vim(), basicSetup]}
+    />
 {/if}
 
 <style>
