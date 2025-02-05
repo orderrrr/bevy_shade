@@ -1,8 +1,5 @@
 @import '@fontsource/fira-mono';
 
-
-
-
 * {
 	padding: 0;
 	margin: 0;
@@ -11,7 +8,6 @@
 body {
 	background-color: var(--black);
 }
-
 
 #bevy_shade_canvas {
 	position: fixed;
