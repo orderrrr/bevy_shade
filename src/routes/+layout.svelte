@@ -1,5 +1,5 @@
 <script>
-    import Header from "$lib/header/Header.svelte";
+    console.log("HERE?");
     import Canvas from "$lib/canvas/Canvas.svelte";
     import "../app.css";
 
@@ -9,7 +9,6 @@
 </script>
 
 <Canvas on:message={ready} />
-<Header />
 
 <main>
     <slot />

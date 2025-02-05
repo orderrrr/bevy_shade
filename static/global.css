@@ -32,13 +32,13 @@
     --cyan: #56b6c2;
     --gutter-grey: #4b5263;
     --comment-grey: #5c6370;
+    --opacity: 90%;
 }
 
 .codemirror-wrapper * {
     font-family: DankMono, InputMono, monospace !important;
     font-weight: bold;
     font-size: 16px;
-    /* background-color: transparent !important; */
 }
 
 .cm-editor {
@@ -51,10 +51,9 @@
 }
 
 .cm-line {
-    /* background-color: var(--black) !important; */
-
-    /* background-color: color-mix(in srgb, var(--black) var(100%, 100%), transparent) !important; */
-    background-color: color-mix(in srgb, var(--black), #0000 20%) !important;
+    background-color: color-mix(in srgb, var(--black), #0000 var(--opacity)) !important;
+    /* backdrop-filter: blur(5px) brightness(40%) grayscale(20%); */
+    backdrop-filter: brightness(30%) grayscale(20%);
 
     display: block !important;
     width: fit-content !important;
@@ -65,7 +64,9 @@
 }
 
 .cm-panels {
-    background-color: color-mix(in srgb, var(--black), #0000 20%) !important;
+    background-color: color-mix(in srgb, var(--black), #0000 var(--opacity)) !important;
+    /* backdrop-filter: blur(5px) brightness(40%) grayscale(20%); */
+    backdrop-filter: brightness(30%) grayscale(20%);
 }
 
 .cm-panels-bottom {
@@ -85,6 +86,12 @@
     color: var(--white) !important;
 }
 
-/* .ͼq,.ͼp,.cm-matchingBracket { */
-/* 	background-color: red; */
-/* } */
+.cm-gutters {
+    background-color: color-mix(in srgb, var(--black), #0000 var(--opacity)) !important;
+    /* backdrop-filter: blur(5px) brightness(40%) grayscale(20%); */
+    backdrop-filter: brightness(30%) grayscale(20%);
+}
+.cm-gutterElement {
+    color: var(--comment-grey) !important;
+    background-color: transparent !important;
+}

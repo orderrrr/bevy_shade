@@ -21,6 +21,9 @@ const config = defineConfig({
             allow: ["./assets"],
         },
     },
+    build: {
+        target: 'esnext'
+    }
 });
 
 export default config;

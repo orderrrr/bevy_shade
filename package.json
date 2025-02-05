@@ -4,31 +4,32 @@
   "scripts": {
     "cargo-build": "npx wasm-pack build --dev wgpu-compute-toy --out-dir ../src/lib/wgputoy",
     "dev": "npm run cargo-build && vite dev",
+    "prev": "npm run cargo-build && vite build && vite preview",
     "odev": "vite dev",
     "build": "vite build",
     "preview": "vite preview"
   },
   "devDependencies": {
-    "@fontsource/fira-mono": "^4.5.10",
-    "@sveltejs/adapter-static": "^3.0.1",
-    "@sveltejs/kit": "^2.5.0",
-    "mv": "^2.1.1",
-    "sass": "^1.77.1",
-    "svelte": "^4.2.9",
-    "svelte-preprocess": "^5.1.4",
-    "vite": "^5.0.12",
+    "svelte-preprocess": "^6.0.3",
+    "svelte": "^5.19.7",
+    "@sveltejs/kit": "^2.17.1",
+    "@sveltejs/adapter-static": "^3.0.8",
+    "vite": "^6.0.11",
     "vite-plugin-top-level-await": "^1.4.4",
-    "vite-plugin-wasm": "^3.3.0"
+    "vite-plugin-wasm": "^3.4.1",
+    "@fontsource/fira-mono": "^4.5.10",
+    "mv": "^2.1.1",
+    "sass": "^1.77.1"
   },
   "dependencies": {
+    "svelte-watch-resize": "^1.0.3",
+    "svelte-codemirror-editor": "^1.4.0",
     "@codemirror/theme-one-dark": "^6.0.0",
     "@iizukak/codemirror-lang-wgsl": "^0.3.0",
     "@replit/codemirror-vim": "^6.2.1",
     "brotli-wasm": "^3.0.1",
     "codemirror": "^6.0.1",
     "js-base64": "^3.7.7",
-    "pocketbase": "^0.21.2",
-    "svelte-codemirror-editor": "^1.4.0",
     "use-animation-frame": "^0.1.5",
     "vite-plugin-wasm-pack": "^0.1.12",
     "wasm-brotli": "^2.0.2"
